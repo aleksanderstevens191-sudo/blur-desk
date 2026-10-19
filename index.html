@@ -3,15 +3,106 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Blur Desk GPU check</title>
+    <meta name="color-scheme" content="dark" />
+    <title>Blur Desk</title>
     <style>
-      body { font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; margin: 2rem; background: #111; color: #ddd; }
-      pre { white-space: pre-wrap; }
+      :root {
+        --bg: #0a0b0d;
+        --panel: #14161a;
+        --line: #23262c;
+        --text: #e8e9eb;
+        --muted: #8a9099;
+        --payoff: #e8e9eb;
+        --price: #ffb020;
+        --good: #3ddc84;
+        --bad: #ff6b6b;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: var(--bg); color: var(--text); }
+      body {
+        font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      main { max-width: 880px; margin: 0 auto; padding: 20px 16px 28px; }
+      header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+      h1 { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+      header p { margin: 0; color: var(--muted); font-size: 15px; }
+      .plot { position: relative; background: var(--panel); border-radius: 14px; overflow: hidden; }
+      canvas { display: block; width: 100%; height: clamp(260px, 56vw, 480px); touch-action: none; cursor: crosshair; }
+      .controls { display: grid; gap: 14px; margin-top: 16px; }
+      .presets { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      button {
+        font: inherit; font-size: 15px; color: var(--text); background: var(--panel);
+        border: 1px solid var(--line); border-radius: 999px; padding: 7px 16px; cursor: pointer;
+      }
+      button:hover { border-color: #3a3f47; }
+      button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+      .slider { display: grid; grid-template-columns: 7.5em 1fr 5.2em; align-items: center; gap: 12px; }
+      .slider label { color: var(--muted); font-size: 15px; }
+      .slider output { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+      input[type="range"] { width: 100%; accent-color: var(--price); height: 28px; margin: 0; }
+      .toggle { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; color: var(--text); font-size: 15px; }
+      .toggle input { appearance: none; width: 42px; height: 24px; border-radius: 999px; background: var(--line); position: relative; margin: 0; cursor: pointer; transition: background 0.15s; }
+      .toggle input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--text); transition: transform 0.15s; }
+      .toggle input:checked { background: var(--price); }
+      .toggle input:checked::after { transform: translateX(18px); }
+      .stats {
+        display: flex; flex-wrap: wrap; gap: 6px 20px; font: 13px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color: var(--muted); font-variant-numeric: tabular-nums;
+      }
+      .stats b { color: var(--text); font-weight: 600; }
+      #err b.good { color: var(--good); }
+      #err b.bad { color: var(--bad); }
+      .spacer { flex: 1; }
+      footer { margin-top: 18px; font-size: 13px; color: var(--muted); }
+      footer a { color: var(--muted); }
+      @media (max-width: 520px) {
+        h1 { font-size: 20px; }
+        .slider { grid-template-columns: 6.4em 1fr 4.6em; gap: 8px; }
+        button { padding: 7px 13px; }
+      }
     </style>
   </head>
   <body>
-    <h1>Blur Desk: WebGPU vs Python</h1>
-    <pre id="out"></pre>
-    <script type="module" src="/src/main.js"></script>
+    <main>
+      <header>
+        <h1>Blur Desk</h1>
+        <p>An option's price is its payoff, blurred. Draw any payoff.</p>
+      </header>
+
+      <div class="plot"><canvas id="plot" aria-label="Payoff and price chart. Drag to draw a payoff."></canvas></div>
+
+      <div class="controls">
+        <div class="presets" role="group" aria-label="Preset payoffs">
+          <button data-preset="call">Call</button>
+          <button data-preset="put">Put</button>
+          <button data-preset="straddle">Straddle</button>
+          <button data-preset="zigzag">Zigzag</button>
+          <span class="spacer"></span>
+          <label class="toggle"><input type="checkbox" id="american" /> American</label>
+        </div>
+        <div class="slider">
+          <label for="T">Time to expiry</label>
+          <input type="range" id="T" min="0" max="2" step="0.01" value="1" />
+          <output for="T" id="Tout"></output>
+        </div>
+        <div class="slider">
+          <label for="sigma">Volatility</label>
+          <input type="range" id="sigma" min="0.05" max="0.8" step="0.01" value="0.3" />
+          <output for="sigma" id="sigmaout"></output>
+        </div>
+        <div class="stats">
+          <span id="err"></span>
+          <span id="speed"></span>
+          <span id="backend"></span>
+        </div>
+      </div>
+
+      <footer>
+        Strike 100, interest rate 5%. Black-Scholes model, priced by a Gaussian blur on the GPU (WebGPU).
+        <a href="./check.html">GPU vs Python check</a>
+      </footer>
+    </main>
+    <script type="module" src="/src/demo.js"></script>
   </body>
 </html>
