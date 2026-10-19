@@ -1,0 +1,44 @@
+{
+  "S0": 100.0,
+  "r": 0.05,
+  "dx": 0.001,
+  "cases": [
+    {
+      "type": "euro_call",
+      "sigma": 0.2,
+      "T": 0.25,
+      "K": 95,
+      "halfWidth": 1.5,
+      "blur": 7.714375794548387,
+      "closedForm": 7.714369430203547
+    },
+    {
+      "type": "euro_call",
+      "sigma": 0.2,
+      "T": 1.0,
+      "K": 100,
+      "halfWidth": 2.5,
+      "blur": 10.450567937133819,
+      "closedForm": 10.450583572185565
+    },
+    {
+      "type": "euro_call",
+      "sigma": 0.35,
+      "T": 0.5,
+      "K": 110,
+      "halfWidth": 2.9748737341529163,
+      "blur": 6.971670360100072,
+      "closedForm": 6.971666598845388
+    },
+    {
+      "type": "american_put",
+      "sigma": 0.2,
+      "T": 1.0,
+      "K": 100,
+      "steps": 200,
+      "halfWidth": 2.5,
+      "blur": 6.0874000985041095,
+      "europeanClosedForm": 5.573526022256971
+    }
+  ]
+}
