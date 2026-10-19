@@ -30,6 +30,8 @@ reference/check.py         every accuracy check and the CPU speed baseline
 reference/make_fixtures.py writes src/fixtures.json for the JS test
 src/blur.js                browser core: kernel, blur, European, American, edge detect
 src/test.mjs               JS vs Python check
+src/gpu.js                 blurGPU / americanGPU: the blur as a WebGPU compute shader (WGSL)
+src/main.js, index.html    browser page: runs the fixtures on the GPU, prints |gpu - py|
 ```
 
 ## Run it
@@ -39,6 +41,9 @@ pip install numpy scipy
 python3 reference/check.py
 python3 reference/make_fixtures.py
 node src/test.mjs
+
+npm install
+npm run dev        # open the printed URL in a WebGPU browser (Chrome, Edge, Safari 26)
 ```
 
 ## The rest of the week
