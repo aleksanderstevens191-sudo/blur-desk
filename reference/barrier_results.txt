@@ -1,0 +1,88 @@
+========================================================================
+1) Weighted mirror (b), one blur, vs Reiner-Rubinstein closed form
+========================================================================
+  S0=100.0; down barrier H=90 (K=80, 100), up barrier H=115 (K=100, 125)
+  grid anchored so the barrier is a node; strikes fall between nodes
+  dx=0.002   max |blur - closed form| over 48 options: 7.26e-08
+  dx=0.001   max |blur - closed form| over 48 options: 9.46e-09
+  dx=0.0005  max |blur - closed form| over 48 options: 1.29e-09
+
+  dx=0.0005, by type (max over 2 strikes x 3 markets):
+  type                  max error   worst case (sigma, T, r, K)  check < 1e-6
+  down-and-out call      1.22e-09   (0.2, 1.0, 0.05, 100.0)      PASS
+  down-and-in call       8.83e-10   (0.15, 2.0, 0.01, 100.0)     PASS
+  up-and-out call        1.15e-10   (0.15, 2.0, 0.01, 100.0)     PASS
+  up-and-in call         1.28e-09   (0.2, 1.0, 0.05, 125.0)      PASS
+  down-and-out put       1.24e-09   (0.2, 1.0, 0.05, 100.0)      PASS
+  down-and-in put        8.94e-10   (0.15, 2.0, 0.01, 100.0)     PASS
+  up-and-out put         9.73e-11   (0.15, 2.0, 0.01, 100.0)     PASS
+  up-and-in put          1.29e-09   (0.2, 1.0, 0.05, 125.0)      PASS
+
+  vanilla calls with the same sampler (no barrier), for scale:
+    K=80.0   |blur - BS| = 8.5e-10
+    K=100.0  |blur - BS| = 1.4e-12
+    K=107.3  |blur - BS| = 1.3e-10
+
+========================================================================
+2) In + out = vanilla
+========================================================================
+  closed forms (knock-ins from their own formulas): max |in + out - BS| = 1.4e-14   PASS
+  weighted-mirror blurs:                          max |in + out - vanilla blur, same grid| = 7.1e-15   PASS
+
+========================================================================
+3) Plain mirror (a), no weight: right only when r = sigma^2/2
+========================================================================
+  down-and-out call, K=100, H=90, sigma=0.2 (sigma^2/2 = 0.02), T=1
+       r  2r/s^2-1  closed form   plain (a)  error (a)  weighted (b)  error (b)
+    0.00     -1.00     6.467368    5.965176   -5.0e-01      6.467368   -1.1e-09
+    0.01     -0.50     6.876127    6.634000   -2.4e-01      6.876127   -1.1e-09
+    0.02      0.00     7.300447    7.300447   -1.2e-09      7.300447   -1.2e-09
+    0.03      0.50     7.740221    7.965373    2.3e-01      7.740221   -1.2e-09
+    0.05      1.50     8.665472    9.293638    6.3e-01      8.665472   -1.2e-09
+    0.10      4.00    11.233188   12.630530    1.4e+00     11.233188   -1.2e-09
+
+  every type, market 1 (r=0.05, sigma=0.2), largest plain-mirror error:
+    down-and-out call    r=0.05: 1.59e+00    r=0.02 (= sigma^2/2): 1.2e-09
+    down-and-in call     r=0.05: 1.59e+00    r=0.02 (= sigma^2/2): 9.9e-10
+    up-and-out call      r=0.05: 8.54e-02    r=0.02 (= sigma^2/2): 1.2e-10
+    up-and-in call       r=0.05: 8.54e-02    r=0.02 (= sigma^2/2): 1.3e-09
+    down-and-out put     r=0.05: 3.60e-02    r=0.02 (= sigma^2/2): 1.2e-09
+    down-and-in put      r=0.05: 3.60e-02    r=0.02 (= sigma^2/2): 1.0e-09
+    up-and-out put       r=0.05: 1.36e+00    r=0.02 (= sigma^2/2): 1.0e-10
+    up-and-in put        r=0.05: 1.36e+00    r=0.02 (= sigma^2/2): 1.3e-09
+  PASS: fails by up to $1.59 when r != sigma^2/2, exact (< 1e-6) when r = sigma^2/2
+
+========================================================================
+4) Step by step (c): blur dt, zero past the barrier, repeat
+========================================================================
+  sigma=0.2, T=1.0, r=0.05; monitored at T/N, 2T/N, ..., T; error vs the continuous closed form
+  type                     K    closed | no shift: N=25       100       400 | BGK shift: N=25       100       400
+  down-and-out call       80  17.06011 |       2.06e+00  1.09e+00  5.64e-01 |       -2.14e-02 -4.28e-03 -1.03e-03
+  down-and-out call      100   8.66547 |       6.89e-01  3.80e-01  2.00e-01 |       -3.15e-03 -2.04e-04 -2.54e-05
+  down-and-in call        80   7.52872 |      -2.06e+00 -1.09e+00 -5.64e-01 |        2.14e-02  4.28e-03  1.03e-03
+  down-and-in call       100   1.78511 |      -6.89e-01 -3.80e-01 -2.00e-01 |        3.15e-03  2.04e-04  2.54e-05
+  up-and-out call        100   0.48148 |       2.95e-01  1.45e-01  7.15e-02 |       -3.10e-02 -8.16e-03 -2.09e-03
+  up-and-out call        125   0.00000 |       0.00e+00  0.00e+00  0.00e+00 |        0.00e+00  0.00e+00  0.00e+00
+  up-and-in call         100   9.96910 |      -2.95e-01 -1.45e-01 -7.15e-02 |        3.10e-02  8.16e-03  2.09e-03
+  up-and-in call         125   2.32427 |      -1.21e-09  1.15e-09  1.14e-09 |       -1.21e-09  1.15e-09  1.14e-09
+  down-and-out put        80   0.00000 |       0.00e+00  0.00e+00  0.00e+00 |        0.00e+00  0.00e+00  0.00e+00
+  down-and-out put       100   0.15122 |       1.34e-01  6.37e-02  3.10e-02 |       -1.45e-02 -3.79e-03 -9.71e-04
+  down-and-in put         80   0.68719 |       2.25e-10  4.36e-10  4.34e-10 |        2.25e-10  4.36e-10  4.34e-10
+  down-and-in put        100   5.42231 |      -1.34e-01 -6.37e-02 -3.10e-02 |        1.45e-02  3.79e-03  9.71e-04
+  up-and-out put         100   5.00149 |       2.32e-01  1.29e-01  6.79e-02 |       -5.59e-04 -7.73e-05 -9.66e-06
+  up-and-out put         125  15.56042 |       1.52e+00  8.06e-01  4.14e-01 |       -2.48e-02 -5.98e-03 -1.46e-03
+  up-and-in put          100   0.57204 |      -2.32e-01 -1.29e-01 -6.79e-02 |        5.59e-04  7.73e-05  9.66e-06
+  up-and-in put          125   5.66753 |      -1.52e+00 -8.06e-01 -4.14e-01 |        2.48e-02  5.98e-03  1.46e-03
+  (8.1s)
+  PASS: without the shift every knock-out is overpriced (a path can cross and come back between monitoring dates)
+  PASS: with the shift the N=400 error is no larger for every option
+
+========================================================================
+5) Independent check: closed forms vs QuantLib AnalyticBarrierEngine
+========================================================================
+  QuantLib 1.44; 400 random cases (50 per type), S in [60,140], K/S in [0.6,1.5], H/S in [0.7,0.99] or [1.01,1.4],
+  sigma in [5%,60%], r in [-1%,12%], dividend yield q in [0,6%], T from 1 week to 3 years
+  max |ours - QuantLib| = 5.5e-12   max relative (prices > 1e-6) = 8.1e-10   PASS
+  worst case: ('up-and-in call', 107.52, 85.52, 139.37, 0.073, 0.6, 0.1, 0.0215, 0.006763157487384839)
+
+all barrier checks passed
