@@ -9,6 +9,8 @@ struct Params {
   mode: u32,   // 0 = plain blur, 1 = American step: max(blur, payoff)
 }
 
+const BLOCK = 32u;
+
 @group(0) @binding(0) var<uniform> p: Params;
 @group(0) @binding(1) var<storage, read> f: array<f32>;
 @group(0) @binding(2) var<storage, read> k: array<f32>;
@@ -29,18 +31,21 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (i >= p.n) { return; }
   let m = 2u * p.half + 1u;
   let base = i32(i) - i32(p.half);
-  // Kahan summation: plain f32 sums drift by ~1e-5 on wide kernels and
-  // the error compounds across American steps.
+  // Sum in blocks of BLOCK taps, then add the block sums. A single running
+  // f32 sum drifts by ~1e-5 on wide kernels and the error compounds across
+  // American steps. Kahan summation fixes that too, but Metal's fast-math
+  // compiler removes the compensation; blocking survives any compiler.
   var s = 0.0;
-  var c = 0.0;
   let interior = base >= 0 && base + i32(m) <= i32(p.n);
-  for (var j = 0u; j < m; j++) {
-    var v: f32;
-    if (interior) { v = f[u32(base) + j]; } else { v = at(base + i32(j)); }
-    let y = k[j] * v - c;
-    let t = s + y;
-    c = (t - s) - y;
-    s = t;
+  for (var j0 = 0u; j0 < m; j0 += BLOCK) {
+    let j1 = min(j0 + BLOCK, m);
+    var b = 0.0;
+    for (var j = j0; j < j1; j++) {
+      var v: f32;
+      if (interior) { v = f[u32(base) + j]; } else { v = at(base + i32(j)); }
+      b += k[j] * v;
+    }
+    s += b;
   }
   if (p.mode == 1u) { s = max(s, payoff[i]); }
   out[i] = s;
