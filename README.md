@@ -34,7 +34,8 @@ src/gpu.js                 blurGPU / americanGPU: the blur as a WebGPU compute s
 src/check.js, check.html   fixture page: runs the fixtures on the GPU, prints |gpu - py|
 src/pricer.js              demo pricing: samples a drawn payoff on the log grid, blurs it on the GPU
 src/bs.js                  Black-Scholes closed forms for the demo's live error counter
-src/demo.js, index.html    the demo: draw a payoff, move expiry and volatility, watch the price
+src/demo.js, index.html    the demo: draw a payoff, move expiry and volatility, watch the price surface
+src/scene.js, src/panels.js, src/wire.js  the 3D wireframe views (plain canvas 2D, no libraries)
 ```
 
 ## Run it
