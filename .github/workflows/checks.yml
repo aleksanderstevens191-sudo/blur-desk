@@ -26,6 +26,8 @@ jobs:
         run: python reference/check_double_barrier.py
       - name: Greeks near the barrier, monitoring-error slopes
         run: python reference/check_greeks_monitoring.py
+      - name: Fat-tailed kernels vs Merton series, QuantLib, Carr-Madan
+        run: python reference/check_kernels.py
 
   node:
     name: JS core vs Python fixtures
