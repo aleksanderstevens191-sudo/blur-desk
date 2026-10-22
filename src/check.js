@@ -4,10 +4,13 @@ import bfx from "./barrier_fixtures.json";
 import { logGrid, gaussianKernel } from "./blur.js";
 import { blurGPU, americanGPU, gpuInfo, barrierGPU, stepBarrierGPU } from "./gpu.js";
 import { blurSpec, blurValue, stepSpec, stepValues } from "./barrier-cases.js";
+import { fftChecks } from "./fft-check.js";
 
 const TOL = 1e-4;
 const out = document.getElementById("out");
 const log = (line = "") => (out.textContent += line + "\n");
+// /check.html?only=fft runs just the FFT section
+const only = new URLSearchParams(location.search).get("only");
 
 async function price(c) {
   const { S0, r, dx } = fx;
@@ -29,7 +32,7 @@ async function main() {
   log(`GPU: ${await gpuInfo()}`);
   log(`tolerance: |gpu - py| < ${TOL}\n`);
   let fails = 0;
-  for (const c of fx.cases) {
+  for (const c of only === "fft" ? [] : fx.cases) {
     const t0 = performance.now();
     const v = await price(c);
     const ms = performance.now() - t0;
@@ -42,8 +45,8 @@ async function main() {
         `  gpu=${v.toFixed(8)}  py=${c.blur.toFixed(8)}  |gpu-py|=${diff.toExponential(2)}  (${ms.toFixed(1)} ms)`
     );
   }
-  log("\nbarriers (reference/make_barrier_fixtures.py):");
-  for (const c of bfx.cases) {
+  if (only !== "fft") log("\nbarriers (reference/make_barrier_fixtures.py):");
+  for (const c of only === "fft" ? [] : bfx.cases) {
     const t0 = performance.now();
     let diffs;
     let shown;
@@ -66,7 +69,9 @@ async function main() {
       (c.images != null ? ` images=${c.images}` : "") +
       ` ${shown}  |gpu-py|=${diff.toExponential(2)}  (${ms.toFixed(1)} ms)`);
   }
-  log(fails ? `\n${fails} failed` : "\nall GPU results within 1e-4 of the Python reference");
+  log("\nFFT convolution vs direct convolution, both on the GPU (src/fft-check.js):");
+  fails += await fftChecks(log, TOL);
+  log(fails ? `\n${fails} failed` : "\nall GPU results within 1e-4 of the Python reference, FFT within 1e-4 of direct");
   document.title = fails ? "FAIL" : "PASS";
 }
 

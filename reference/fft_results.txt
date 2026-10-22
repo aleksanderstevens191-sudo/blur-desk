@@ -1,0 +1,117 @@
+Stage 3: FFT convolution vs direct convolution on the GPU (WebGPU / WGSL)
+Run in this container on Chromium's software WebGPU adapter (SwiftShader, no real GPU).
+Timings here are NOT GPU timings; the Apple GPU numbers come from /fft-bench.html on Alek's Mac.
+
+==== node src/test-fft.mjs: the 64-bit twin of the WGSL (src/fft.js) vs blur() ====
+FFT blur vs blur(), 64-bit, payoff rows (calls and puts); error relative to the largest value
+PASS n=10    m=1     rows=1  N=16    plain 9.0e-18  split 0.0e+0
+PASS n=10    m=3     rows=3  N=16    plain 1.9e-16  split 2.4e-16
+PASS n=64    m=17    rows=4  N=128   plain 3.4e-16  split 9.1e-16
+PASS n=100   m=99    rows=5  N=256   plain 6.5e-16  split 6.5e-16
+PASS n=256   m=511   rows=2  N=1024  plain 1.5e-15  split 1.4e-15
+PASS n=1000  m=257   rows=7  N=2048  plain 1.4e-15  split 2.2e-15
+PASS n=1001  m=401   rows=16 N=2048  plain 2.2e-15  split 2.8e-15
+PASS n=3000  m=2001  rows=6  N=8192  plain 4.7e-15  split 4.5e-15
+
+expBlur (the exact blur of e^z, reflection included) vs blur() of e^z
+PASS n=50    m=99    relative 6.8e-16
+PASS n=1001  m=401   relative 2.3e-15
+PASS n=2000  m=3999  relative 5.9e-15
+PASS n=7087  m=7087  relative 9.5e-15
+
+wraparound: row zero except f[n-1] = 100; its blur is exactly 0 on nodes i < n-1-half
+PASS n=1000 m=401 padded N=2048: leak 5.7e-14
+PASS n=1000 m=401 one size short N=1024 < n+m-1=1400: leak 2.0e+2 (caught)
+PASS n=512 m=3 padded N=1024: leak 8.3e-15
+PASS n=512 m=3 one size short N=512 < n+m-1=514: leak 1.6e+2 (caught)
+PASS n=300 m=397 padded N=1024: leak 4.8e-14
+PASS n=300 m=397 one size short N=512 < n+m-1=696: leak 4.5e+1 (caught)
+PASS n=300 m=599 payoff rows, one size short N=512: |fft - blur()| 9.1e+1 (caught)
+PASS n=1001 m=401 payoff rows, one size short N=1024: |fft - blur()| 3.7e+1 (caught)
+all FFT checks pass
+
+==== /check.html (FFT section): GPU FFT (f32) vs GPU direct (f32) vs exact blur (f64) ====
+GPU: google swiftshader
+FFT convolution vs direct convolution, both on the GPU (src/fft-check.js):
+16 rows per case: calls and puts, strikes 74 to 135, S0 = 100 at the middle node.
+The FFT blurs each row minus its a + b S part (fft.js). Pass: |fft - direct| < 1e-4 near the
+money (spots S0/2 to 2 S0, where prices are read) and, over the whole grid, |fft - exact| < 1e-4
+on nodes worth up to S0 and < 1e-6 of the value on deep in-the-money nodes worth more ('scaled').
+32-bit floats can't hold 1e-4 on those: one f32 step at 3383 is 2.4e-4. exact = blur() in 64-bit.
+PASS n=1001  m=3     N=1024  payoffs to   91  near: |fft-direct| 1.55e-5  whole grid, scaled: |fft-exact| 1.53e-5, |direct-exact| 1.07e-5  (80 ms)
+PASS n=1001  m=401   N=2048  payoffs to   91  near: |fft-direct| 3.05e-5  whole grid, scaled: |fft-exact| 2.08e-5, |direct-exact| 2.72e-5  (62 ms)
+PASS n=2000  m=3999  N=8192  payoffs to  197  near: |fft-direct| 6.10e-5  whole grid, scaled: |fft-exact| 2.32e-5, |direct-exact| 5.46e-5  (1056 ms)
+PASS n=4097  m=4097  N=16384 payoffs to  701  near: |fft-direct| 7.63e-5  whole grid, scaled: |fft-exact| 3.61e-5, |direct-exact| 7.79e-5  (2076 ms)
+PASS n=5341  m=5341  N=16384 payoffs to 1370  near: |fft-direct| 6.87e-5  whole grid, scaled: |fft-exact| 4.83e-5, |direct-exact| 8.44e-5  (3359 ms)
+PASS n=7087  m=7087  N=16384 payoffs to 3383  near: |fft-direct| 7.63e-5  whole grid, scaled: |fft-exact| 5.42e-5, |direct-exact| 1.14e-4  (6089 ms)
+without the split, the same FFT on the last case: whole grid, scaled |fft-exact| 1.22e-3 (the 32-bit error of the biggest payoffs spreads to every node)
+
+wraparound test: row zero except f[n-1] = 100, so the blur must be 0 on nodes i < n-1-half
+PASS padded,         N=2048 >= n+m-1=1400: max |blur| there = 2.29e-5
+PASS one size short, N=1024 <  n+m-1=1400: max |blur| there = 2.00e+2  (leak caught, as it should be)
+PASS one size short on the n=1001 m=401 payoff rows (N=1024): |fft-direct| 3.72e+1  (caught)
+
+all GPU results within 1e-4 of the Python reference, FFT within 1e-4 of direct
+
+==== /fft-bench.html?quick=1&nmax=12 on SwiftShader (shape of the method only; JSON in fft_bench_swiftshader.json) ====
+GPU: google swiftshader
+each batch: rows x n = 32,768 payoff values (calls and puts), one kernel of m taps;
+FFT length N = nextPow2(n + m - 1) (padded, no wraparound); times are ms per batch, GPU work only
+(payoffs and kernel uploaded once; the FFT includes transforming the kernel every batch).
+
+n = 256 (128 rows)        m   direct ms      fft ms   direct/fft   |fft-direct| near the money
+                        3     2.30        5.70        0.40   2.9e-5
+                        7     4.20        5.70        0.74   3.1e-5
+                       15     6.30        4.70        1.34   3.8e-5
+                       31     8.70        6.80        1.28   4.6e-5
+                       63    17.60        4.70        3.74   3.8e-5
+  crossover: FFT faster from m ~ 10 taps
+
+n = 512 (64 rows)        m   direct ms      fft ms   direct/fft   |fft-direct| near the money
+                        3     2.30        4.60        0.50   3.1e-5
+                        7     3.30        4.40        0.75   3.8e-5
+                       15     6.80        4.40        1.55   5.3e-5
+                       31     7.80        5.60        1.39   3.4e-5
+                       63    17.50        4.80        3.65   3.8e-5
+  crossover: FFT faster from m ~ 9 taps
+
+n = 1024 (32 rows)        m   direct ms      fft ms   direct/fft   |fft-direct| near the money
+                        3     2.50        5.50        0.45   2.8e-5
+                        7     3.70        4.60        0.80   3.1e-5
+                       15     5.60        4.60        1.22   3.8e-5
+                       31     8.80        4.50        1.96   3.4e-5
+                       63    17.90        5.80        3.09   3.1e-5
+  crossover: FFT faster from m ~ 10 taps
+
+n = 2048 (16 rows)        m   direct ms      fft ms   direct/fft   |fft-direct| near the money
+                        3     2.40        5.80        0.41   3.1e-5
+                        7     3.40        5.60        0.61   3.8e-5
+                       15     6.80        5.70        1.19   3.8e-5
+                       31     9.10        5.60        1.62   3.8e-5
+                       63    18.80        5.70        3.30   3.1e-5
+  crossover: FFT faster from m ~ 12 taps
+
+n = 4096 (8 rows)        m   direct ms      fft ms   direct/fft   |fft-direct| near the money
+                        3     2.30       10.60        0.22   3.1e-5
+                        7     5.10        5.50        0.93   3.4e-5
+                       15     5.50        7.00        0.79   3.8e-5
+                       31     9.90        6.70        1.48   3.8e-5
+                       63    16.50        5.50        3.00   3.8e-5
+                      127    41.00        7.00        5.86   3.1e-5
+  crossover: FFT faster from m ~ 20 taps
+
+crossover m* by grid size:
+  n =    256   m* = 10
+  n =    512   m* = 9
+  n =   1024   m* = 10
+  n =   2048   m* = 12
+  n =   4096   m* = 20
+
+options/sec at the sizes the fat-tailed kernels use (grid = kernel width, n = m):
+one row = one strike priced at every spot on the grid; a price = one strike at one spot
+  Gaussian, T=1              direct      456 ms per 2 rows ->    0.0k strikes/sec,   23.5k prices/sec
+  Gaussian, T=1              FFT        3.50 ms per 2 rows ->    0.6k strikes/sec,    3.1M prices/sec
+                             FFT 130.1x faster, N=16384, |fft-direct| near the money 6.9e-5
+
+all FFT results within 1e-4 of direct near the money
+

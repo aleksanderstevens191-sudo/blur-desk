@@ -44,6 +44,8 @@ jobs:
           cache: npm
       - run: node src/test.mjs
       - run: node src/test-barriers.mjs
+      - name: FFT blur vs direct blur, wraparound test
+        run: node src/test-fft.mjs
       - run: npm ci
       - name: Build the demo, check and bench pages
         run: npm run build
