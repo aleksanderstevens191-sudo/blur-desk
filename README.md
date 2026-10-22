@@ -65,7 +65,15 @@ Broadie, Glasserman and Kou (1997) showed that a barrier checked on N dates beha
 
 - All three methods run as WebGPU compute shaders (`src/gpu.js`). `src/barrier.js` is the same code in 64-bit JavaScript and matches Python to about 1e-12 (`node src/test-barriers.mjs`).
 - `/check.html` runs 26 barrier fixtures from `reference/make_barrier_fixtures.py` on the GPU in 32-bit floats: worst |gpu − Python| is 1.8e-6 (tolerance 1e-4).
-- `/bench.html` prices all 8 types × 32 barriers × 64 strikes = 16,384 options in one dispatch, worst error 8.1e-6 against the closed form. The CPU baseline is QuantLib's analytic engine on the same options, about 305,000 options/sec on one thread (`python3 reference/bench_quantlib.py`). GPU throughput depends on the GPU; run `/bench.html` to measure yours.
+- `/bench.html` prices all 8 types × 32 barriers × 64 strikes = 16,384 options in one dispatch. On an Apple GPU the worst error is 9.3e-6 against the closed form:
+
+  | Same 16,384 barrier options | options/sec |
+  | --- | --- |
+  | Apple GPU (Metal-3, WebGPU in Chrome), one dispatch, 1.6 ms | **10.2 million** |
+  | QuantLib's analytic barrier formulas, 1 CPU thread (`reference/bench_quantlib.py`) | 305,000 |
+  | the same blur in plain JavaScript, 1 CPU thread, same Mac | 41,600 |
+
+  That is about 34 times QuantLib's closed form. The QuantLib figure was measured on a different machine (a 2.8 GHz Xeon), and browser timers are only good to 0.1 ms, so treat the ratio as rough. Four spot prices printed by both programs agree to within 1e-6.
 - The demo has a barrier panel (one or two barriers, knock-out or knock-in), a method switch (plain, weighted, step by step with or without the shift), the knocked-out region shaded on the surface, an animated hall of mirrors, and a live error against the closed form.
 - Near the barrier the Greeks get violent: half a trading day out, an up-and-out call's gamma is 19 times a vanilla's ([plot](docs/barrier_greeks.png)).
 

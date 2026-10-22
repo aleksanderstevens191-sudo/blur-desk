@@ -41,7 +41,28 @@ PASS step     down call N=24           out=9.365835 in=1.084749  |gpu-py|=1.52e-
 
 all GPU results within 1e-4 of the Python reference
 
-==== /bench.html?reps=3: all 8 single-barrier types x 32 barriers x 64 strikes, ONE dispatch ====
+==== /bench.html on Alek's Mac (Apple GPU, Chrome), 2026-10-22, copied from the page ====
+GPU: apple metal-3
+market: S0=100 sigma=0.2 T=1 r=0.05; weighted mirror, one blur per option, dx=0.002 in ln S
+options: 8 types x 32 barriers x 64 strikes = 16,384
+
+setup on the CPU (payoff rows, kernel, option table): 27.8 ms, once
+kernel: 1631 taps, so 26.7M tap evaluations per dispatch
+
+one dispatch, submit to done (median of 20): 1.60 ms  ->  10,240,000 options/sec
+including reading the prices back (median of 5): 1.50 ms  ->  10,922,667 options/sec
+
+max |gpu - closed form| over all 16,384 options: 9.25e-6  PASS (< 1e-4)
+  worst: up-and-out put K=129.84 H=113.428 gpu=16.439524 closed form=16.439514
+
+same blur on the CPU in plain JavaScript (1 thread, 64-bit), 1024 options: 41,626 options/sec
+QuantLib on the CPU: python3 reference/bench_quantlib.py (same option set; it prints these four too):
+  #0: down-and-out call K=70.0000 H=99.0050  2.71554780
+  #5461: up-and-out call K=91.6667 H=125.8600  5.14344311
+  #10922: down-and-in put K=113.3333 H=88.5148  10.65897751
+  #16383: up-and-in put K=135.0000 H=139.9339  0.32947522
+
+==== the same page in this container: /bench.html?reps=3 on the software adapter (SwiftShader), not a GPU timing ====
 GPU: google swiftshader
 market: S0=100 sigma=0.2 T=1 r=0.05; weighted mirror, one blur per option, dx=0.002 in ln S
 options: 8 types x 32 barriers x 64 strikes = 16,384
