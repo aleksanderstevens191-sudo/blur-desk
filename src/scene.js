@@ -57,6 +57,9 @@ export function drawScene(ctx, cam, v, W, H, time) {
     label(ctx, "TIME TO EXPIRY", tx, ty, { size: fs, alpha: 0.4 });
   }
 
+  // barriers: a wall at each one from expiry to today, the knocked region hatched on the floor
+  if (v.barrier) drawBarriers(ctx, cam, v, top, fs);
+
   // the blur front: a plane at the current expiry
   const zT = Z(v.T);
   const plane = new Lines(cam);
@@ -163,6 +166,47 @@ export function drawScene(ctx, cam, v, W, H, time) {
   if (v.front) {
     const [sx, sy] = cam.project(...P(0, v.T, v.front.V[0]));
     label(ctx, `PRICE · T=${v.T.toFixed(2)}`, Math.max(sx, 60), sy - 14, { size: fs, rgb: AMBER, alpha: 0.9 });
+  }
+}
+
+function drawBarriers(ctx, cam, v, top, fs) {
+  const b = v.barrier;
+  const z0 = Z(0);
+  const z1 = Z(Math.max(v.T, 0.05));
+  const wall = new Lines(cam);
+  const hatch = new Lines(cam);
+  for (const S of [b.L, b.U]) {
+    if (!S) continue;
+    const x = X(S);
+    wall.move(x, 0, z0).line(x, top, z0).line(x, top, z1).line(x, 0, z1).line(x, 0, z0);
+    for (let k = 1; k < 10; k++) {
+      const z = z0 + ((z1 - z0) * k) / 10;
+      wall.seg([x, 0, z], [x, top, z]);
+    }
+  }
+  // diagonals x = d + (z - z0), clipped to each knocked strip
+  const strips = [];
+  if (b.L) strips.push([X(40), X(b.L)]);
+  if (b.U) strips.push([X(b.U), X(160)]);
+  for (const [xa, xb] of strips) {
+    for (let d = xa - (z1 - z0); d < xb; d += 0.05) {
+      const za = Math.max(z0, z0 + xa - d);
+      const zb = Math.min(z1, z0 + xb - d);
+      if (zb > za) hatch.seg([d + (za - z0), 0, za], [d + (zb - z0), 0, zb]);
+    }
+  }
+  glow(ctx, hatch.path, RED, 0.22, 1, 0);
+  glow(ctx, wall.path, RED, 0.35, 1, 0.6);
+  for (const [S, name] of [[b.L, "L"], [b.U, "U"]]) {
+    if (!S) continue;
+    const [sx, sy] = cam.project(X(S), top, z1);
+    label(ctx, `${name} ${S.toFixed(2)}`, sx, sy - 10, { rgb: RED, alpha: 0.9, size: fs });
+  }
+  const text = b.io === "in" ? "KNOCKED IN" : "KNOCKED OUT";
+  for (const [xa, xb] of strips) {
+    if (xb - xa < 0.25) continue;
+    const [sx, sy] = cam.project((xa + xb) / 2, 0, (z0 + z1) / 2);
+    label(ctx, text, sx, sy, { rgb: RED, alpha: 0.75, size: fs });
   }
 }
 

@@ -246,7 +246,7 @@ def _monitor(A, B, z, ib, ud):
 
 
 def stepping_prices(kinds, S0, K, H, sigma, T, r, steps, q=0.0, shift=False,
-                    dx_max=0.0005):
+                    dx_max=0.0005, info=None):
     """Discretely monitored barriers (monitoring at T/steps, 2T/steps, ..., T).
 
     Blur one interval, discount, take the knocked value past the barrier, repeat.
@@ -254,7 +254,7 @@ def stepping_prices(kinds, S0, K, H, sigma, T, r, steps, q=0.0, shift=False,
     (Broadie-Glasserman-Kou), so the discrete grid approximates the continuous price
     at the original H. The grid spacing is chosen so the shifted barrier is a node.
     Returns {kind: price at S0} for every kind given (all must share the same
-    up/down direction and call/put).
+    up/down direction and call/put). If info is a dict it receives the grid.
     """
     ud = {parse(k)[0] for k in kinds}
     cp = {parse(k)[2] for k in kinds}
@@ -270,6 +270,8 @@ def stepping_prices(kinds, S0, K, H, sigma, T, r, steps, q=0.0, shift=False,
     x0 = np.log(S0)
     z = anchored_grid(h, x0, grid_width(sigma, T), dx)
     ib = int(round((h - z[0]) / dx))
+    if info is not None:
+        info.update(anchor=float(h), lo=int(round((z[0] - h) / dx)), n=len(z), dx=float(dx), ib=ib)
     f = payoff_fn(K, cp)
     van = sample_payoff(f, z, kinks=[np.log(K)])[None, :]
     # rows: vanilla, knock-out, knock-in

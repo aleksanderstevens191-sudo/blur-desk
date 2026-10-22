@@ -15,7 +15,7 @@ export function padXY(W, H) {
   return { px, py, toS, toY };
 }
 
-export function drawPad(ctx, W, H, payoff, frontMesh, meshS) {
+export function drawPad(ctx, W, H, payoff, frontMesh, meshS, barriers = []) {
   const { px, py } = padXY(W, H);
   const grid = new Path2D();
   for (let S = 40; S <= 160; S += 10) {
@@ -35,6 +35,14 @@ export function drawPad(ctx, W, H, payoff, frontMesh, meshS) {
   label(ctx, "40", px(40), H - 6, { align: "left", size: 9, alpha: 0.45 });
   label(ctx, "100", px(100), H - 6, { size: 9, alpha: 0.45 });
   label(ctx, "160", px(160), H - 6, { align: "right", size: 9, alpha: 0.45 });
+  if (barriers.length) {
+    const bl = new Path2D();
+    for (const S of barriers) {
+      bl.moveTo(px(S), py(60));
+      bl.lineTo(px(S), py(0));
+    }
+    glow(ctx, bl, RED, 0.7, 1, 0.6);
+  }
 
   if (frontMesh) {
     const fr = new Path2D();
@@ -213,4 +221,339 @@ export function drawBars(ctx, W, H, t, times) {
     bars.seg([x0, h, z0], [x0, h, z1]).seg([x1, h, z0], [x1, h, z1]);
   }
   glow(ctx, bars.path, AMBER, 0.75, 1, 0.8);
+}
+
+// a dim note in the middle of an empty panel
+function idle(ctx, W, H, text) {
+  label(ctx, text, W / 2, H / 2, { size: 9, alpha: 0.4 });
+}
+
+// 07: price today against S, flat, with the barriers, the knocked region
+// hatched, the closed form dashed under the blur price.
+export function drawBarrierView(ctx, W, H, d) {
+  const l = 6;
+  const r = 6;
+  const top = 8;
+  const bot = 14;
+  const px = (S) => l + ((S - S_MIN) / (S_MAX - S_MIN)) * (W - l - r);
+  const frame = new Path2D();
+  frame.rect(px(S_MIN), top, px(S_MAX) - px(S_MIN), H - top - bot);
+  glow(ctx, frame, WHITE, 0.18, 1, 0);
+  label(ctx, "40", px(40), H - 6, { align: "left", size: 9, alpha: 0.45 });
+  label(ctx, "100", px(100), H - 6, { size: 9, alpha: 0.45 });
+  label(ctx, "160", px(160), H - 6, { align: "right", size: 9, alpha: 0.45 });
+  if (!d) return idle(ctx, W, H, "BARRIER OFF · PICK DOWN, UP OR DOUBLE");
+  const { S, V, cf, payoff, bar } = d;
+  let yMax = 1;
+  for (let i = 0; i < S.length; i++) yMax = Math.max(yMax, V[i], cf ? cf[i] : 0, payoff[i]);
+  yMax = Math.ceil((yMax * 1.1) / 5) * 5;
+  const py = (y) => top + (1 - Math.min(y, yMax * 1.05) / yMax) * (H - top - bot);
+  const curve = (Y) => {
+    const p = new Path2D();
+    for (let i = 0; i < S.length; i++) i ? p.lineTo(px(S[i]), py(Y[i])) : p.moveTo(px(S[i]), py(Y[i]));
+    return p;
+  };
+  // knocked strips
+  const hatch = new Path2D();
+  const strips = [];
+  if (bar.L) strips.push([px(S_MIN), px(bar.L)]);
+  if (bar.U) strips.push([px(bar.U), px(S_MAX)]);
+  const h = H - top - bot;
+  for (const [xa, xb] of strips) {
+    for (let x = xa - h; x < xb; x += 7) {
+      const x1 = Math.max(xa, x);
+      const x2 = Math.min(xb, x + h);
+      if (x2 <= x1) continue;
+      hatch.moveTo(x1, top + h - (x1 - x));
+      hatch.lineTo(x2, top + h - (x2 - x));
+    }
+  }
+  glow(ctx, hatch, RED, 0.2, 1, 0);
+  const bl = new Path2D();
+  for (const [Sb, name] of [[bar.L, "L"], [bar.U, "U"]]) {
+    if (!Sb) continue;
+    bl.moveTo(px(Sb), top);
+    bl.lineTo(px(Sb), H - bot);
+    label(ctx, name, px(Sb) + (name === "L" ? -6 : 6), top + 6, { size: 9, rgb: RED, alpha: 0.9 });
+  }
+  glow(ctx, bl, RED, 0.9, 1, 0.8);
+  glow(ctx, curve(payoff), WHITE, 0.35, 1, 0);
+  if (cf) {
+    ctx.setLineDash([4, 4]);
+    glow(ctx, curve(cf), WHITE, 0.8, 1, 0);
+    ctx.setLineDash([]);
+  }
+  glow(ctx, curve(V), AMBER, 1, 1.6, 1.2);
+  const [xs, ys] = [px(100), py(V[60])];
+  ctx.strokeStyle = `rgba(${AMBER},0.9)`;
+  ctx.beginPath();
+  ctx.arc(xs, ys, 4, 0, TAU);
+  ctx.stroke();
+  label(ctx, cf ? "AMBER BLUR · DASHED CLOSED FORM" : "AMBER BLUR · NO CLOSED FORM", W - r - 4, top + 7, { align: "right", size: 9, alpha: 0.5 });
+}
+
+// 08: |error| at S = 100 for the three methods, log scale.
+export function drawMethod(ctx, W, H, rows) {
+  if (!Array.isArray(rows)) return idle(ctx, W, H, rows || "NEEDS A BARRIER");
+  const l = 88;
+  const r = 58;
+  const lo = -9;
+  const hi = 0;
+  const px = (e) => l + ((Math.log10(Math.max(e, 1e-12)) - lo) / (hi - lo)) * (W - l - r);
+  const rowH = (H - 16) / rows.length;
+  const g = new Path2D();
+  for (let k = lo; k <= hi; k += 3) {
+    g.moveTo(px(10 ** k), 2);
+    g.lineTo(px(10 ** k), H - 12);
+    label(ctx, `1E${k}`, px(10 ** k), H - 5, { size: 8, alpha: 0.4 });
+  }
+  glow(ctx, g, WHITE, 0.1, 1, 0);
+  const lim = new Path2D();
+  lim.moveTo(px(1e-4), 2);
+  lim.lineTo(px(1e-4), H - 12);
+  ctx.setLineDash([3, 3]);
+  glow(ctx, lim, RED, 0.6, 1, 0);
+  ctx.setLineDash([]);
+  rows.forEach((row, k) => {
+    const y = 4 + k * rowH + rowH / 2;
+    const rgb = row.sel ? AMBER : WHITE;
+    label(ctx, row.name, 4, y, { align: "left", size: 9, rgb, alpha: row.sel ? 1 : 0.6 });
+    if (row.err === null) {
+      label(ctx, "REFERENCE", l + 4, y, { align: "left", size: 9, alpha: 0.5 });
+      return;
+    }
+    const bar = new Path2D();
+    const x1 = Math.max(px(row.err), l + 2);
+    bar.rect(l, y - rowH * 0.28, x1 - l, rowH * 0.56);
+    glow(ctx, bar, row.err < 1e-4 ? "78,240,160" : RED, row.sel ? 1 : 0.55, 1, row.sel ? 0.8 : 0);
+    label(ctx, row.err.toExponential(1).toUpperCase(), W - 4, y, { align: "right", size: 9, rgb, alpha: row.sel ? 1 : 0.6 });
+  });
+}
+
+// 09: the hall of mirrors. The knock-out payoff is the payoff minus its mirror
+// images across the barriers. Each image is the one before it flipped about
+// the mirror's foot point, then weighted by e^{a (x_m - x)} (a = 0: plain mirror).
+// Images appear one at a time; then the kernel sweeps the corridor and the
+// price comes out.
+const SWING = 0.8;
+const HOLD = 1.4;
+const SWEEP = 2.6;
+const ease = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * u));
+
+export function mirrorCells(m) {
+  const { lo, hi, a, f } = m;
+  const XW = 1;
+  const x0 = m.x0;
+  if (lo !== null && hi !== null) {
+    const w = hi - lo;
+    const cMin = Math.max(-m.maxCells, Math.floor((x0 - XW - lo) / w));
+    const cMax = Math.min(m.maxCells, Math.floor((x0 + XW - lo) / w));
+    const g = (c, x) => {
+      if (c % 2 === 0) {
+        const n = -c / 2;
+        return Math.exp(a * n * w) * f(x + 2 * n * w);
+      }
+      const n = (c + 1) / 2;
+      return -Math.exp(a * (lo + n * w - x)) * f(2 * lo + 2 * n * w - x);
+    };
+    const order = [];
+    for (let k = 1; k <= Math.max(cMax, -cMin); k++) {
+      if (k <= cMax) order.push(k);
+      if (-k >= cMin) order.push(-k);
+    }
+    const cells = order.map((c) => ({
+      c, M: Math.abs(c), x0: lo + c * w, x1: lo + (c + 1) * w, mirror: c > 0 ? lo + c * w : lo + (c + 1) * w, src: c > 0 ? c - 1 : c + 1,
+    }));
+    return { XW, home: { c: 0, x0: lo, x1: hi }, cells, g, mirrors: Array.from({ length: cMax - cMin + 2 }, (_, k) => lo + (cMin + k) * w) };
+  }
+  const h = lo ?? hi;
+  const down = lo !== null;
+  const g = (c, x) => (c === 0 ? f(x) : -Math.exp(a * (h - x)) * f(2 * h - x));
+  const far = down ? [h, x0 + XW + 1] : [x0 - XW - 1, h];
+  const img = down ? [x0 - XW - 1, h] : [h, x0 + XW + 1];
+  return { XW, home: { c: 0, x0: far[0], x1: far[1] }, cells: [{ c: down ? -1 : 1, M: 1, x0: img[0], x1: img[1], mirror: h, src: 0 }], g, mirrors: [h] };
+}
+
+export function drawMirrors(ctx, W, H, t, m) {
+  if (!m || typeof m === "string") return idle(ctx, W, H, m || "BARRIER OFF · THE MIRRORS APPEAR WITH A BARRIER");
+  const { XW, home, cells, g, mirrors } = mirrorCells(m);
+  const x0 = m.x0;
+  const chart = W >= 640 ? 190 : 0; // error vs number of images, on the right
+  const l = 8;
+  const r = 8 + (chart ? chart + 20 : 0);
+  const top = chart ? 22 : 34;
+  const bot = 18;
+  const px = (x) => l + ((x - (x0 - XW)) / (2 * XW)) * (W - l - r);
+  const mid = top + (H - top - bot) / 2;
+  // vertical scale: the payoff over the plotted S range, with room for the images
+  let yMax = 1;
+  for (let k = 0; k <= 60; k++) {
+    const x = Math.log(S_MIN) + ((Math.log(S_MAX) - Math.log(S_MIN)) * k) / 60;
+    if (x >= home.x0 && x <= home.x1) yMax = Math.max(yMax, Math.abs(g(0, x)));
+  }
+  yMax *= 1.6;
+  const half = (H - top - bot) / 2;
+  const py = (y) => mid - (Math.max(-6 * yMax, Math.min(6 * yMax, y)) / yMax) * half; // clipped below
+  const NPT = 90;
+  const sample = (c, xa, xb) => {
+    const a = Math.max(xa, x0 - XW - 0.02);
+    const b = Math.min(xb, x0 + XW + 0.02);
+    if (b <= a) return [];
+    return Array.from({ length: NPT + 1 }, (_, k) => {
+      const x = a + ((b - a) * k) / NPT;
+      return [x, g(c, x)];
+    });
+  };
+  const poly = (pts) => {
+    const p = new Path2D();
+    pts.forEach(([X, Y], k) => (k ? p.lineTo(X, Y) : p.moveTo(X, Y)));
+    return p;
+  };
+
+  // timeline
+  const per = SWING + (m.a !== 0 ? 0.5 : 0.15);
+  const cycle = cells.length * per + SWEEP + HOLD;
+  const tt = t % cycle;
+  const shown = Math.min(cells.length, Math.floor(tt / per));
+  const active = tt < cells.length * per ? cells[shown] : null;
+  const u = active ? (tt - shown * per) / per : 1;
+  const sweep = tt > cells.length * per ? Math.min(1, (tt - cells.length * per) / SWEEP) : 0;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, top - 6, W - r + 4, H - top - bot + 12);
+  ctx.clip();
+  // axis and mirrors
+  const ax = new Path2D();
+  ax.moveTo(l, mid);
+  ax.lineTo(W - r, mid);
+  glow(ctx, ax, WHITE, 0.25, 1, 0);
+  const mir = new Path2D();
+  const real = new Path2D();
+  for (const x of mirrors) {
+    if (x < x0 - XW || x > x0 + XW) continue;
+    const isReal = Math.abs(x - (m.lo ?? NaN)) < 1e-9 || Math.abs(x - (m.hi ?? NaN)) < 1e-9;
+    (isReal ? real : mir).moveTo(px(x), top - 4);
+    (isReal ? real : mir).lineTo(px(x), H - bot + 4);
+  }
+  ctx.setLineDash([3, 4]);
+  glow(ctx, mir, RED, 0.35, 1, 0);
+  ctx.setLineDash([]);
+  glow(ctx, real, RED, 0.9, 1.2, 0.8);
+
+  const dimNow = sweep > 0 ? 0.45 : 1;
+  // the payoff itself (live corridor)
+  const homePts = sample(0, home.x0, home.x1).map(([x, y]) => [px(x), py(y)]);
+  glow(ctx, poly(homePts), WHITE, 0.95 * dimNow, 1.6, 1.2);
+  // images already in place
+  for (let k = 0; k < shown; k++) {
+    const cl = cells[k];
+    glow(ctx, poly(sample(cl.c, cl.x0, cl.x1).map(([x, y]) => [px(x), py(y)])), AMBER, 0.75 * dimNow, 1.2, 0.8);
+  }
+  // the one being placed: swing about the foot point, then take on its weight
+  if (active) {
+    const swing = ease(u * (per / SWING));
+    const morph = per > SWING ? ease((u * per - SWING) / (per - SWING)) : 1;
+    const th = (active.c > 0 ? -1 : 1) * Math.PI * swing;
+    const fx = px(active.mirror);
+    const pts = sample(active.c, active.x0, active.x1).map(([x]) => {
+      const xs = 2 * active.mirror - x; // where this point comes from
+      const ys = g(active.src, xs);
+      const wgt = 1 + morph * (Math.exp(m.a * (active.mirror - x)) - 1);
+      // flip about the foot point (fx, mid), in screen space, y up
+      const du = px(xs) - fx;
+      const dv = mid - py(ys);
+      const uu = du * Math.cos(th) - dv * Math.sin(th);
+      const vv = du * Math.sin(th) + dv * Math.cos(th);
+      const ySwing = mid - vv; // screen y after the swing
+      const yW = py(-ys * wgt); // after the weight
+      return [fx + uu, swing < 1 ? ySwing : yW];
+    });
+    glow(ctx, poly(pts), AMBER, 1, 1.6, 1.4);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = `rgba(${AMBER},0.9)`;
+    ctx.beginPath();
+    ctx.arc(fx, mid, 4 + 2 * Math.sin(t * 8), 0, TAU);
+    ctx.stroke();
+    ctx.globalCompositeOperation = "source-over";
+  }
+  // the blur: a kernel sweeping the corridor, and the price behind it
+  if (sweep > 0 && m.front) {
+    const xa = Math.max(x0 - XW, Math.log(S_MIN / 100) + x0);
+    const xb = Math.min(x0 + XW, Math.log(S_MAX / 100) + x0);
+    const xc = xa + (xb - xa) * ease(sweep);
+    const bell = [];
+    const std = Math.max(m.std, 0.01);
+    for (let k = 0; k <= 80; k++) {
+      const x = xc - 4 * std + (8 * std * k) / 80;
+      bell.push([px(x), mid - 0.55 * half * Math.exp((-(x - xc) * (x - xc)) / (2 * std * std))]);
+    }
+    glow(ctx, poly(bell), WHITE, 0.6, 1, 0.6);
+    const pr = [];
+    for (let i = 0; i < m.front.S.length; i++) {
+      const x = Math.log(m.front.S[i] / 100) + x0;
+      if (x > xc) break;
+      pr.push([px(x), py(m.front.V[i])]);
+    }
+    if (pr.length > 1) glow(ctx, poly(pr), AMBER, 1, 2.2, 1.6);
+  }
+  ctx.restore();
+
+  // labels: barrier levels, and the error with this many images
+  for (const x of mirrors) {
+    if (x < x0 - XW || x > x0 + XW) continue;
+    label(ctx, (100 * Math.exp(x - x0)).toFixed(0), px(x), H - 7, { size: 8, rgb: RED, alpha: 0.6 });
+  }
+  // images counted as complete rings: every cell with |c| <= M is in place.
+  // The price itself always uses every image the grid holds.
+  const placed = active ? shown : cells.length;
+  let Mnow = 0;
+  while (cells.some((cl) => cl.M === Mnow + 1) && cells.every((cl, k) => cl.M > Mnow + 1 || k < placed)) Mnow++;
+  if (sweep > 0) Mnow = m.errs.length - 1;
+  const e = m.errs[Math.min(Mnow, m.errs.length - 1)];
+  const eTxt = e === undefined ? "" : e.err === null ? "(REFERENCE)" : `ERROR AT S=100 ${e.err.toExponential(1).toUpperCase()}`;
+  const double = m.lo !== null && m.hi !== null;
+  const count = sweep > 0 ? "ALL IMAGES" : `IMAGES ${Mnow}${double ? " EACH SIDE" : ""}`;
+  label(ctx, `${count}   ${eTxt}`, l, 8, { align: "left", size: 10, rgb: AMBER, alpha: 0.95 });
+  if (chart) drawImageErrors(ctx, W - chart - 8, top, chart, H - top - bot, m.errs, Mnow, double);
+  const what = sweep > 0 ? "BLUR THE IMAGE-TILED PAYOFF → PRICE" : active ? `FLIP ABOUT ${(100 * Math.exp(active.mirror - x0)).toFixed(1)}${m.a !== 0 ? ", THEN WEIGHT e^a(xm−x)" : ""}` : "";
+  if (chart) label(ctx, what, W - r, 8, { align: "right", size: 9, alpha: 0.6 });
+  else label(ctx, what, l, 21, { align: "left", size: 9, alpha: 0.6 });
+}
+
+// |price at S=100 - closed form| against the number of images, log scale
+function drawImageErrors(ctx, x, y, w, h, errs, Mnow, double) {
+  const lo = -9;
+  const hi = 1;
+  const top = y + 14;
+  const bot = y + h - 12;
+  const py = (e) => bot - ((Math.log10(Math.max(e, 1e-12)) - lo) / (hi - lo)) * (bot - top);
+  label(ctx, double ? "ERROR vs IMAGES EACH SIDE" : "ERROR vs IMAGES", x, y + 2, { align: "left", size: 9, alpha: 0.6 });
+  const g = new Path2D();
+  for (let k = lo; k <= hi; k += 2) {
+    g.moveTo(x, py(10 ** k));
+    g.lineTo(x + w, py(10 ** k));
+  }
+  glow(ctx, g, WHITE, 0.08, 1, 0);
+  const lim = new Path2D();
+  lim.moveTo(x, py(1e-4));
+  lim.lineTo(x + w, py(1e-4));
+  ctx.setLineDash([3, 3]);
+  glow(ctx, lim, RED, 0.5, 1, 0);
+  ctx.setLineDash([]);
+  label(ctx, "1E-4", x + w, py(1e-4) - 6, { align: "right", size: 8, rgb: RED, alpha: 0.7 });
+  const n = errs.length;
+  const bw = w / n;
+  errs.forEach(({ M, err }) => {
+    const bx = x + M * bw + bw * 0.18;
+    const cur = M === Mnow;
+    if (err === null) {
+      label(ctx, "REF", bx + bw * 0.32, bot - 6, { size: 8, alpha: 0.5 });
+    } else {
+      const p = new Path2D();
+      p.rect(bx, py(err), bw * 0.64, bot - py(err));
+      glow(ctx, p, cur ? AMBER : WHITE, cur ? 1 : 0.3, 1, cur ? 0.8 : 0);
+    }
+    if (n <= 4 || M % 4 === 0 || cur) label(ctx, String(M), bx + bw * 0.32, bot + 7, { size: 8, rgb: cur ? AMBER : WHITE, alpha: cur ? 1 : 0.45 });
+  });
 }

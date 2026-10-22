@@ -1,0 +1,84 @@
+Stage 4: barriers on the GPU (WebGPU / WGSL)
+Run in this container on Chromium's software WebGPU adapter (SwiftShader, no real GPU).
+Timings here are NOT GPU timings; run /check.html and /bench.html on a real GPU for those.
+
+==== /check.html: GPU (f32) vs the Python reference (f64), tolerance 1e-4 ====
+GPU: google swiftshader
+tolerance: |gpu - py| < 0.0001
+
+PASS euro_call    K=95 T=0.25 sigma=0.2  gpu=7.71437600  py=7.71437579  |gpu-py|=2.05e-7  (91.3 ms)
+PASS euro_call    K=100 T=1 sigma=0.2  gpu=10.45056666  py=10.45056794  |gpu-py|=1.28e-6  (181.4 ms)
+PASS euro_call    K=110 T=0.5 sigma=0.35  gpu=6.97166896  py=6.97167036  |gpu-py|=1.40e-6  (233.9 ms)
+PASS american_put K=100 T=1 sigma=0.2 steps=200  gpu=6.08739376  py=6.08740010  |gpu-py|=6.34e-6  (2357.0 ms)
+
+barriers (reference/make_barrier_fixtures.py):
+PASS weighted down-and-out call        gpu=8.66547070 py=8.66547166  |gpu-py|=9.54e-7  (373.3 ms)
+PASS weighted down-and-in call         gpu=1.78511211 py=1.78511191  |gpu-py|=1.99e-7  (30.7 ms)
+PASS weighted up-and-out call          gpu=0.48147997 py=0.48147996  |gpu-py|=1.49e-8  (30.3 ms)
+PASS weighted up-and-in call           gpu=9.96910381 py=9.96910361  |gpu-py|=1.97e-7  (24.7 ms)
+PASS weighted down-and-out put         gpu=0.15122029 py=0.15122038  |gpu-py|=8.66e-8  (22.3 ms)
+PASS weighted down-and-in put          gpu=5.42230589 py=5.42230565  |gpu-py|=2.46e-7  (24.2 ms)
+PASS weighted up-and-out put           gpu=6.87301319 py=6.87301317  |gpu-py|=1.84e-8  (23.8 ms)
+PASS weighted up-and-in put            gpu=1.02742870 py=1.02742864  |gpu-py|=6.09e-8  (21.4 ms)
+PASS weighted down-and-out call        gpu=8.33984158 py=8.33984157  |gpu-py|=1.08e-8  (24.1 ms)
+PASS weighted down-and-in call         gpu=2.04829955 py=2.04829944  |gpu-py|=1.16e-7  (24.1 ms)
+PASS weighted up-and-out call          gpu=0.41339123 py=0.41339127  |gpu-py|=4.11e-8  (24.5 ms)
+PASS weighted up-and-in call           gpu=9.97474949 py=9.97474973  |gpu-py|=2.45e-7  (28.4 ms)
+PASS weighted down-and-out put         gpu=0.13404499 py=0.13404506  |gpu-py|=6.14e-8  (24.0 ms)
+PASS weighted down-and-in put          gpu=6.33303942 py=6.33303987  |gpu-py|=4.43e-7  (24.2 ms)
+PASS weighted up-and-out put           gpu=7.63024969 py=7.63024958  |gpu-py|=1.05e-7  (23.1 ms)
+PASS weighted up-and-in put            gpu=1.30274346 py=1.30274313  |gpu-py|=3.21e-7  (23.7 ms)
+PASS plain    down-and-out call        gpu=9.29363624 py=9.29363803  |gpu-py|=1.80e-6  (22.3 ms)
+PASS plain    up-and-out put           gpu=6.38580494 py=6.38580566  |gpu-py|=7.17e-7  (22.9 ms)
+PASS double   double-knock-out call    gpu=0.01493737 py=0.01493737  |gpu-py|=2.94e-9  (21.7 ms)
+PASS double   double-knock-out put     gpu=2.11033520 py=2.11033544  |gpu-py|=2.35e-7  (20.0 ms)
+PASS double   double-knock-out call    gpu=0.13034263 py=0.13034298  |gpu-py|=3.47e-7  (21.2 ms)
+PASS double   double-knock-out call    images=2 gpu=0.04643390 py=0.04643393  |gpu-py|=2.17e-8  (27.3 ms)
+PASS step     up call N=50             out=1.512705 in=8.937879  |gpu-py|=9.69e-7  (3800.1 ms)
+PASS step     up call N=50 shifted     out=1.151548 in=9.299037  |gpu-py|=1.63e-6  (3753.6 ms)
+PASS step     down put N=24 shifted    out=0.136157 in=5.437367  |gpu-py|=1.50e-6  (2486.6 ms)
+PASS step     down call N=24           out=9.365835 in=1.084749  |gpu-py|=1.52e-8  (2360.0 ms)
+
+all GPU results within 1e-4 of the Python reference
+
+==== /bench.html?reps=3: all 8 single-barrier types x 32 barriers x 64 strikes, ONE dispatch ====
+GPU: google swiftshader
+market: S0=100 sigma=0.2 T=1 r=0.05; weighted mirror, one blur per option, dx=0.002 in ln S
+options: 8 types x 32 barriers x 64 strikes = 16,384
+
+setup on the CPU (payoff rows, kernel, option table): 61.0 ms, once
+kernel: 1631 taps, so 26.7M tap evaluations per dispatch
+
+one dispatch, submit to done (median of 3): 5404.90 ms  ->  3,031 options/sec
+including reading the prices back (median of 3): 5185.70 ms  ->  3,159 options/sec
+
+max |gpu - closed form| over all 16,384 options: 8.08e-6  PASS (< 1e-4)
+  worst: up-and-in call K=71.03 H=101.005 gpu=32.264656 closed form=32.264664
+
+same blur on the CPU in plain JavaScript (1 thread, 64-bit), 1024 options: 18,221 options/sec
+QuantLib on the CPU: python3 reference/bench_quantlib.py (same option set; it prints these four too):
+  #0: down-and-out call K=70.0000 H=99.0050  2.71554732
+  #5461: up-and-out call K=91.6667 H=125.8600  5.14344358
+  #10922: down-and-in put K=113.3333 H=88.5148  10.65897655
+  #16383: up-and-in put K=135.0000 H=139.9339  0.32947525
+
+==== python3 reference/bench_quantlib.py (same 16,384 options, 4-core Xeon 2.8 GHz, 1 thread) ====
+QuantLib 1.44 AnalyticBarrierEngine, Python bindings, 1 CPU thread
+options: 8 types x 32 barriers x 64 strikes = 16,384
+  build instruments:         110.1 ms
+  first pricing:              53.5 ms  ->  306,519 options/sec
+  reprice after a bump:       53.8 ms  ->  304,361 options/sec (median of 5)
+  build + price:             163.5 ms  ->  100,189 options/sec
+  #0: down-and-out call K=70.0000 H=99.0050  2.71554810
+  #5461: up-and-out call K=91.6667 H=125.8600  5.14344375
+  #10922: down-and-in put K=113.3333 H=88.5148  10.65897659
+  #16383: up-and-in put K=135.0000 H=139.9339  0.32947521
+
+==== demo (/), headless, weighted mirror on the GPU vs the continuous closed form ====
+sigma=0.3, T=1, r=0.05, strike 100, max |price - closed form| over S in [40, 160] at T:
+  down-and-out call L=80.05             1.6e-5   (vanilla call on the same page: 1.4e-5)
+  up-and-in put     U=140.14            5.5e-7
+  double knock-out call L=80.05 U=140.14 1.4e-6
+at S=100, double knock-out call: plain mirror 2.9e-4, weighted 1.6e-7, step N=12 + BGK shift 1.5e-1
+image-count study (double KO call, error at S=100 vs images kept each side):
+  M=0 3e+0, M=1 1e-1, M=2 2e-5, M>=3 2e-7
