@@ -73,6 +73,16 @@
       .chips button[aria-pressed="true"], .toggle[aria-pressed="true"] { color: var(--bg); background: var(--text); border-color: var(--text); }
       .toggle { width: 100%; padding: 6px 0; }
       .toggle[aria-pressed="true"] { background: var(--red); border-color: var(--red); color: #fff; }
+      .toggle.amber[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: var(--bg); }
+      .chips button:disabled, .toggle:disabled, input[type="range"]:disabled { opacity: 0.3; cursor: default; }
+      .chips.two { grid-template-columns: repeat(2, 1fr); }
+      .chips.three { grid-template-columns: repeat(3, 1fr); }
+      .row { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; align-items: center; }
+      .row.even { grid-template-columns: 1fr 1fr; }
+      .sl { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; color: var(--dim); font-size: 9px; }
+      .panel.span2 { grid-column: span 2; }
+      .panel.full { grid-column: 1 / -1; }
+      #mirrors { height: 220px; }
 
       input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; margin: 0; background: none; cursor: pointer; }
       input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--line2); }
@@ -94,9 +104,10 @@
         #scene { height: clamp(320px, 92vw, 460px); }
         .panels { grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 6px; }
         .panel { padding: 7px 8px; }
-        .panel.wide { grid-column: span 2; }
+        .panel.wide, .panel.span2, .panel.full { grid-column: span 2; }
         .panel canvas { height: 96px; }
-        .panel.wide canvas { height: 120px; }
+        .panel.wide canvas, .panel.span2 canvas { height: 120px; }
+        #mirrors { height: 190px; }
       }
     </style>
   </head>
@@ -109,7 +120,7 @@
             <div class="cell"><span>MODE</span><b id="cMode">EUROPEAN</b></div>
             <div class="cell"><span>EXPIRY</span><b id="cT">1.00 YR</b></div>
             <div class="cell"><span>VOLATILITY</span><b id="cSigma">30%</b></div>
-            <div class="cell"><span>MAX ERROR vs B-S</span><b id="cErr">—</b></div>
+            <div class="cell"><span id="cErrLbl">MAX ERROR vs B-S</span><b id="cErr">—</b></div>
             <div class="cell"><span>ENGINE</span><b id="cGpu">STARTING</b></div>
           </div>
         </header>
@@ -125,6 +136,7 @@
             <div><i style="background: var(--text)"></i>PAYOFF AT EXPIRY</div>
             <div><i style="background: var(--amber)"></i>PRICE TODAY</div>
             <div id="legEx" hidden><i style="background: var(--red)"></i>EXERCISE EARLY</div>
+            <div id="legBar" hidden><i style="background: var(--red)"></i><span id="legBarText">BARRIER · KNOCKED OUT</span></div>
           </div>
           <div class="hint">DRAG TO ORBIT</div>
         </section>
@@ -158,7 +170,7 @@
             <div class="foot"><span id="fEx1">EXPIRY ONLY</span><span id="fEx2"></span></div>
           </div>
           <div class="panel">
-            <h3>05 / ERROR vs B-S <em>LOG</em></h3>
+            <h3><span id="errTitle">05 / ERROR vs B-S</span> <em>LOG</em></h3>
             <div class="rel"><canvas id="error"></canvas><div class="big" id="bigErr"></div></div>
             <div class="foot"><span>S 40–160</span><span id="fN"></span></div>
           </div>
@@ -167,11 +179,55 @@
             <canvas id="bars"></canvas>
             <div class="foot"><span id="fGpu">—</span><span id="fMs"></span></div>
           </div>
+          <div class="panel span2">
+            <h3>07 / BARRIER <em id="barTag">OFF</em></h3>
+            <canvas id="barrier" aria-label="Price today against stock price, with the barriers and the knocked-out region"></canvas>
+            <div class="row">
+              <div class="chips" role="group" aria-label="Barrier">
+                <button data-barrier="off" aria-pressed="true">OFF</button>
+                <button data-barrier="down">DOWN</button>
+                <button data-barrier="up">UP</button>
+                <button data-barrier="double">DOUBLE</button>
+              </div>
+              <div class="chips two" role="group" aria-label="Knock-out or knock-in">
+                <button data-io="out" aria-pressed="true">OUT</button>
+                <button data-io="in">IN</button>
+              </div>
+            </div>
+            <div class="row even">
+              <label class="sl"><span>LOWER L</span><input type="range" id="L" min="50" max="99" step="0.25" value="80" aria-label="Lower barrier" /></label>
+              <label class="sl"><span>UPPER U</span><input type="range" id="U" min="101" max="150" step="0.25" value="140" aria-label="Upper barrier" /></label>
+            </div>
+            <div class="foot"><span>L <b id="fL">—</b> · U <b id="fU">—</b></span><span id="fBar">PICK A BARRIER</span></div>
+          </div>
+          <div class="panel wide">
+            <h3>08 / METHOD <em id="methTag">WEIGHTED MIRROR</em></h3>
+            <canvas id="method" aria-label="Error at S = 100 for each method"></canvas>
+            <div class="chips three" role="group" aria-label="Pricing method">
+              <button data-method="plain">PLAIN</button>
+              <button data-method="weighted" aria-pressed="true">WEIGHTED</button>
+              <button data-method="step">STEP</button>
+            </div>
+            <div class="row even">
+              <button class="toggle amber" id="shift" aria-pressed="true">BGK SHIFT: ON</button>
+              <div class="chips three" role="group" aria-label="Monitoring dates">
+                <button data-steps="12">12</button>
+                <button data-steps="48" aria-pressed="true">48</button>
+                <button data-steps="192">192</button>
+              </div>
+            </div>
+            <div class="foot"><span id="fMeth1">AT S=100</span><span id="fMeth2"></span></div>
+          </div>
+          <div class="panel full">
+            <h3>09 / HALL OF MIRRORS <em id="mirTag">—</em></h3>
+            <canvas id="mirrors" aria-label="The payoff and its mirror images across the barriers, appearing one by one"></canvas>
+            <div class="foot"><span id="fMir1">—</span><span id="fMir2"></span></div>
+          </div>
         </section>
       </div>
       <div class="note">
         <span>STRIKE 100 · RATE 5% · BLACK-SCHOLES, PRICED BY A GAUSSIAN BLUR ON THE GPU (WEBGPU)</span>
-        <a href="./check.html">GPU vs PYTHON CHECK →</a>
+        <span><a href="./check.html">GPU vs PYTHON CHECK →</a> &nbsp; <a href="./bench.html">BARRIER BENCHMARK →</a></span>
       </div>
     </main>
     <script type="module" src="/src/demo.js"></script>

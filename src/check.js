@@ -1,7 +1,9 @@
 // Runs the fixtures on the GPU and compares with the Python reference values.
 import fx from "./fixtures.json";
+import bfx from "./barrier_fixtures.json";
 import { logGrid, gaussianKernel } from "./blur.js";
-import { blurGPU, americanGPU, gpuInfo } from "./gpu.js";
+import { blurGPU, americanGPU, gpuInfo, barrierGPU, stepBarrierGPU } from "./gpu.js";
+import { blurSpec, blurValue, stepSpec, stepValues } from "./barrier-cases.js";
 
 const TOL = 1e-4;
 const out = document.getElementById("out");
@@ -39,6 +41,30 @@ async function main() {
         (c.steps ? ` steps=${c.steps}` : "") +
         `  gpu=${v.toFixed(8)}  py=${c.blur.toFixed(8)}  |gpu-py|=${diff.toExponential(2)}  (${ms.toFixed(1)} ms)`
     );
+  }
+  log("\nbarriers (reference/make_barrier_fixtures.py):");
+  for (const c of bfx.cases) {
+    const t0 = performance.now();
+    let diffs;
+    let shown;
+    if (c.method === "step") {
+      const spec = stepSpec(c);
+      const v = stepValues(spec, (await stepBarrierGPU(spec)).rows, bfx.S0);
+      diffs = ["out", "in"].map((k) => Math.abs(v[k] - c.py[k]));
+      shown = `out=${v.out.toFixed(6)} in=${v.in.toFixed(6)}`;
+    } else {
+      const v = blurValue(c, await barrierGPU(blurSpec(c, bfx.S0)), bfx.S0);
+      diffs = [Math.abs(v - c.py)];
+      shown = `gpu=${v.toFixed(8)} py=${c.py.toFixed(8)}`;
+    }
+    const ms = performance.now() - t0;
+    const diff = Math.max(...diffs);
+    const ok = diff < TOL;
+    if (!ok) fails++;
+    const what = c.method === "step" ? `${c.kind} N=${c.steps}${c.shift ? " shifted" : ""}` : c.kind;
+    log(`${ok ? "PASS" : "FAIL"} ${c.method.padEnd(8)} ${what.padEnd(24)}` +
+      (c.images != null ? ` images=${c.images}` : "") +
+      ` ${shown}  |gpu-py|=${diff.toExponential(2)}  (${ms.toFixed(1)} ms)`);
   }
   log(fails ? `\n${fails} failed` : "\nall GPU results within 1e-4 of the Python reference");
   document.title = fails ? "FAIL" : "PASS";

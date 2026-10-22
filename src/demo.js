@@ -1,11 +1,15 @@
 // The demo page: draw a payoff, move expiry and volatility, and the GPU blurs
-// it into a price surface over (stock price, time to expiry).
-import { Payoff, priceCurve, S0, R } from "./pricer.js";
+// it into a price surface over (stock price, time to expiry). With a barrier
+// on, the surface comes from the hall of mirrors (or step-by-step monitoring).
+import { Payoff, priceCurve, priceBarrier, snapBarrier, S0, R } from "./pricer.js";
 import { bsCall, bsPut } from "./bs.js";
+import { barrierClosedForm, dkoClosedForm, vanillaBS, mirrorExponent } from "./barrier.js";
 import { gpuInfo } from "./gpu.js";
 import { Camera, fit } from "./wire.js";
 import { drawScene, toMesh, maskToMesh, MESH_S } from "./scene.js";
-import { drawPad, padXY, drawKernel, drawCoil, drawExercise, drawError, drawBars } from "./panels.js";
+import {
+  drawPad, padXY, drawKernel, drawCoil, drawExercise, drawError, drawBars, drawBarrierView, drawMethod, drawMirrors,
+} from "./panels.js";
 
 const SLICES = 12; // surface slices between the payoff and today
 const PRESETS = {
@@ -18,7 +22,10 @@ const PRESETS = {
 const CLOSED_FORM = { call: bsCall, put: bsPut };
 
 const $ = (id) => document.getElementById(id);
-const state = { preset: "call", T: +$("T").value, sigma: +$("sigma").value, american: false };
+const state = {
+  preset: "call", T: +$("T").value, sigma: +$("sigma").value, american: false,
+  barrier: "off", io: "out", L: +$("L").value, U: +$("U").value, method: "weighted", shift: true, steps: 48,
+};
 let payoff = new Payoff(PRESETS.call);
 let useGPU = true;
 
@@ -32,6 +39,10 @@ const view = {
   payoffEx: null,
   front: null,
   slices: [],
+  barrier: null, // { L, U, io }: barrier levels (S) for the scene
+  cf: null, // closed form on MESH_S, when there is one
+  method: null, // rows for panel 08
+  mirrors: null, // what panel 09 animates
 };
 let errs = null; // |V - BS| binned onto the mesh
 let boundary = []; // [S, tau] points of the early-exercise boundary
@@ -41,8 +52,17 @@ const times = [];
 let busy = false;
 let dirty = false;
 
-function payoffMesh() {
-  view.payoff = Float64Array.from(MESH_S, (S) => payoff.value(S));
+// Barrier levels from the sliders, snapped onto the pricing grid.
+function barrierSpec(st) {
+  if (st.barrier === "off") return null;
+  const ud = st.barrier;
+  return { ud, io: st.io, L: ud !== "up" ? snapBarrier(st.L) : null, U: ud !== "down" ? snapBarrier(st.U) : null };
+}
+const knocked = (b, S) => (b.L && S < b.L.S) || (b.U && S > b.U.S);
+
+// At expiry a knock-out pays where the barrier hasn't been crossed, a knock-in where it has.
+function payoffMesh(b) {
+  view.payoff = Float64Array.from(MESH_S, (S) => (!b || knocked(b, S) === (b.io === "in") ? payoff.value(S) : 0));
   view.payoffEx = Uint8Array.from(view.payoff, (p) => (p > 0 ? 1 : 0));
 }
 
@@ -62,10 +82,16 @@ async function reprice() {
   dirty = true;
   if (busy) return;
   busy = true;
+  document.body.dataset.busy = "1"; // for scripted checks
   while (dirty) {
     dirty = false;
-    const snap = { ...state };
-    payoffMesh();
+    const snap = { ...state, bar: barrierSpec(state) };
+    payoffMesh(snap.bar);
+    if (snap.bar) {
+      await barrierPass(snap);
+      continue;
+    }
+    view.barrier = view.cf = view.method = view.mirrors = null;
     const t0 = performance.now();
     const c = await price(snap.T);
     const ms = performance.now() - t0;
@@ -92,6 +118,7 @@ async function reprice() {
     boundary = exerciseBoundary();
   }
   busy = false;
+  document.body.dataset.busy = "0";
 }
 
 function exerciseBoundary() {
@@ -116,15 +143,113 @@ function maxError(r) {
     errs = null;
     return null;
   }
+  return curveError(r.S, r.V, (S) => f(S, S0, r.sigma, r.T, R));
+}
+
+// max |V - closed form| over the curve; also bins it onto the mesh for panel 05
+function curveError(S, V, f) {
   errs = new Float64Array(MESH_S.length);
   let e = 0;
-  for (let i = 0; i < r.S.length; i++) {
-    const d = Math.abs(r.V[i] - f(r.S[i], S0, r.sigma, r.T, R));
+  for (let i = 0; i < S.length; i++) {
+    const d = Math.abs(V[i] - f(S[i]));
     e = Math.max(e, d);
-    const k = Math.min(MESH_S.length - 1, Math.max(0, Math.round(r.S[i] - MESH_S[0])));
+    const k = Math.min(MESH_S.length - 1, Math.max(0, Math.round(S[i] - MESH_S[0])));
     errs[k] = Math.max(errs[k], d);
   }
   return e;
+}
+
+// ---- barriers ----
+const IO_NAME = { out: "KNOCK-OUT", in: "KNOCK-IN" };
+const barrierName = (b) => (b.ud === "double" ? `DOUBLE ${IO_NAME[b.io]}` : `${b.ud.toUpperCase()}-AND-${b.io.toUpperCase()}`);
+const METHOD_NAME = { plain: "PLAIN MIRROR", weighted: "WEIGHTED MIRROR", step: "STEP BY STEP" };
+
+// Continuous-barrier closed form for the call and put presets (strike 100).
+function barrierCF(snap) {
+  const cp = snap.preset === "call" || snap.preset === "put" ? snap.preset : null;
+  if (!cp) return null;
+  const { bar: b, sigma, T } = snap;
+  if (b.ud === "double") {
+    return (S) => {
+      const d = dkoClosedForm(S, S0, b.L.S, b.U.S, sigma, T, R, 0, cp);
+      return b.io === "out" ? d : vanillaBS(S, S0, sigma, T, R, 0, cp) - d;
+    };
+  }
+  const H = b.ud === "down" ? b.L.S : b.U.S;
+  return (S) => barrierClosedForm(`${b.ud}-and-${b.io} ${cp}`, S, S0, H, sigma, T, R);
+}
+
+async function priceB(snap) {
+  const opts = { T: snap.T, sigma: snap.sigma, barrier: snap.bar, method: snap.method, shift: snap.shift, steps: snap.steps };
+  try {
+    return await priceBarrier(payoff, { ...opts, gpu: useGPU });
+  } catch (e) {
+    if (!useGPU) throw e;
+    useGPU = false;
+    $("cGpu").textContent = "CPU FALLBACK";
+    $("fGpu").textContent = `WEBGPU FAILED: ${e.message}`;
+    return priceBarrier(payoff, { ...opts, gpu: false });
+  }
+}
+
+// One barrier reprice: every slice of the surface (and the image-count study
+// for panel 09) comes back from one dispatch.
+async function barrierPass(snap) {
+  const b = snap.bar;
+  const t0 = performance.now();
+  const r = snap.T > 0 ? await priceB(snap) : null;
+  const ms = performance.now() - t0;
+  const front = r ? r.curves[r.curves.length - 1] : { S: MESH_S, V: view.payoff };
+  const cf = barrierCF(snap);
+  errs = null;
+  const err = cf ? curveError(front.S, front.V, cf) : null;
+  view.T = snap.T;
+  view.american = false;
+  view.barrier = { L: b.L && b.L.S, U: b.U && b.U.S, io: b.io };
+  view.front = { tau: snap.T, V: toMesh(front.S, front.V), ex: null };
+  view.slices = r ? r.curves.slice(0, -1).map((c) => ({ tau: c.tau, V: toMesh(c.S, c.V), ex: null })) : [];
+  view.cf = cf ? Float64Array.from(MESH_S, cf) : null;
+  boundary = [];
+
+  // 08: each method at S = 100, against the closed form (or the weighted mirror)
+  const ref = cf ? cf(S0) : r ? r.atS0.weighted : 0;
+  const errOf = (v, isRef) => (isRef ? null : Math.abs(v - ref));
+  view.method = r && [
+    { name: "PLAIN", err: errOf(r.atS0.plain, false), sel: snap.method === "plain" },
+    { name: "WEIGHTED", err: errOf(r.atS0.weighted, !cf), sel: snap.method === "weighted" },
+    { name: `STEP ${snap.steps}${snap.shift ? "+BGK" : ""}`, err: errOf(r.atS0.step, false), sel: snap.method === "step" },
+  ];
+  // 09: the images, and how the price at S = 100 converges as they are added
+  const last = r ? r.images[r.images.length - 1].V : 0;
+  view.mirrors = r && {
+    lo: b.L ? Math.log(b.L.S) : null,
+    hi: b.U ? Math.log(b.U.S) : null,
+    a: snap.method === "plain" ? 0 : mirrorExponent(snap.sigma, R),
+    f: (x) => payoff.value(Math.exp(x)),
+    x0: Math.log(S0),
+    maxCells: 4,
+    errs: r.images.map((im, M) => ({ M, err: cf ? Math.abs(im.V - cf(S0)) : M === r.images.length - 1 ? null : Math.abs(im.V - last) })),
+    front: { S: front.S, V: front.V },
+    std: snap.sigma * Math.sqrt(snap.T),
+  };
+
+  const result = { ...snap, S: front.S, V: front.V, ms, atS0: r && r.atS0, images: r && r.images };
+  window.blurDesk = { result, error: err, method: view.method, closedFormAtS0: cf ? cf(S0) : null };
+  times.push(ms);
+  if (times.length > 64) times.shift();
+  updateStats(result, err);
+  const nPrices = r ? r.curves.reduce((s, c) => s + c.S.length, 0) : front.S.length;
+  $("fN").textContent = `${nPrices.toLocaleString()} PRICES`;
+  $("cMode").textContent = barrierName(b);
+  $("barTag").textContent = barrierName(b);
+  $("fBar").textContent = err === null ? "NO CLOSED FORM FOR THIS PAYOFF" : `MAX |BLUR − CLOSED FORM| ${err.toExponential(1).toUpperCase()}`;
+  $("methTag").textContent = METHOD_NAME[snap.method];
+  $("fMeth1").textContent = cf ? "AT S=100 vs CLOSED FORM" : "AT S=100 vs WEIGHTED MIRROR";
+  $("fMeth2").innerHTML = r ? `PRICE <b>${r.atS0[snap.method].toFixed(6)}</b>` : "";
+  const a = mirrorExponent(snap.sigma, R);
+  $("mirTag").textContent = snap.method === "plain" ? "PLAIN: WEIGHT 1" : snap.method === "weighted" ? "WEIGHTED: (H/S)^a" : "STEP BY STEP USES NO MIRRORS · SHOWN WEIGHTED";
+  $("fMir1").textContent = b.io === "out" ? "KNOCK-OUT = BLUR OF PAYOFF − ITS IMAGES" : "KNOCK-IN = VANILLA − KNOCK-OUT";
+  $("fMir2").innerHTML = `a = 2ν/σ² = <b>${a.toFixed(3)}</b>`;
 }
 
 function updateStats(r, e) {
@@ -145,6 +270,7 @@ function updateStats(r, e) {
     big.className = "big na";
   }
   $("fN").textContent = `${r.S.length.toLocaleString()} PRICES`;
+  if (!r.bar) $("cMode").textContent = r.american ? "AMERICAN" : "EUROPEAN";
   $("fMs").innerHTML = `<b>${r.ms.toFixed(1)}</b> MS`;
   $("cGpu").textContent = `${useGPU ? "GPU" : "CPU"} ${r.ms.toFixed(1)} MS`;
   $("fEx2").textContent = r.american ? `${r.steps} DATES` : "";
@@ -170,6 +296,7 @@ for (const id of ["T", "sigma"]) {
 }
 
 function setAmerican(on) {
+  if (on && state.barrier !== "off") return; // barriers here are European
   state.american = on;
   const b = $("american");
   b.setAttribute("aria-pressed", String(on));
@@ -182,6 +309,79 @@ function setAmerican(on) {
 }
 $("american").addEventListener("click", () => setAmerican(!state.american));
 $("exercise").addEventListener("click", () => setAmerican(!state.american));
+
+// barrier controls
+function readBarrier() {
+  state.L = +$("L").value;
+  state.U = +$("U").value;
+  const b = barrierSpec(state);
+  $("fL").textContent = b && b.L ? b.L.S.toFixed(2) : "—";
+  $("fU").textContent = b && b.U ? b.U.S.toFixed(2) : "—";
+}
+function setBarrier(name) {
+  state.barrier = name;
+  for (const el of document.querySelectorAll("[data-barrier]")) el.setAttribute("aria-pressed", String(el.dataset.barrier === name));
+  const on = name !== "off";
+  if (on && state.american) setAmerican(false);
+  $("american").disabled = on;
+  $("L").disabled = !(name === "down" || name === "double");
+  $("U").disabled = !(name === "up" || name === "double");
+  $("cErrLbl").textContent = on ? "MAX ERROR vs CLOSED FORM" : "MAX ERROR vs B-S";
+  $("errTitle").textContent = on ? "05 / ERROR vs CLOSED FORM" : "05 / ERROR vs B-S";
+  $("legBar").hidden = !on;
+  $("legBarText").textContent = state.io === "in" ? "BARRIER · KNOCKED IN" : "BARRIER · KNOCKED OUT";
+  if (!on) {
+    $("barTag").textContent = "OFF";
+    $("fBar").textContent = "PICK A BARRIER";
+    $("mirTag").textContent = "—";
+    $("fMir1").textContent = $("fMir2").textContent = $("fMeth2").textContent = "";
+    $("cMode").textContent = state.american ? "AMERICAN" : "EUROPEAN";
+  }
+  readBarrier();
+}
+const pick = (attr, value) => {
+  for (const el of document.querySelectorAll(`[data-${attr}]`)) el.setAttribute("aria-pressed", String(el.dataset[attr] === String(value)));
+};
+for (const el of document.querySelectorAll("[data-barrier]")) {
+  el.addEventListener("click", () => {
+    setBarrier(el.dataset.barrier);
+    reprice();
+  });
+}
+for (const el of document.querySelectorAll("[data-io]")) {
+  el.addEventListener("click", () => {
+    state.io = el.dataset.io;
+    pick("io", state.io);
+    $("legBarText").textContent = state.io === "in" ? "BARRIER · KNOCKED IN" : "BARRIER · KNOCKED OUT";
+    reprice();
+  });
+}
+for (const el of document.querySelectorAll("[data-method]")) {
+  el.addEventListener("click", () => {
+    state.method = el.dataset.method;
+    pick("method", state.method);
+    reprice();
+  });
+}
+for (const el of document.querySelectorAll("[data-steps]")) {
+  el.addEventListener("click", () => {
+    state.steps = +el.dataset.steps;
+    pick("steps", state.steps);
+    reprice();
+  });
+}
+$("shift").addEventListener("click", () => {
+  state.shift = !state.shift;
+  $("shift").setAttribute("aria-pressed", String(state.shift));
+  $("shift").textContent = state.shift ? "BGK SHIFT: ON" : "BGK SHIFT: OFF";
+  reprice();
+});
+for (const id of ["L", "U"]) {
+  $(id).addEventListener("input", () => {
+    readBarrier();
+    reprice();
+  });
+}
 
 function setPreset(name) {
   state.preset = name;
@@ -254,7 +454,7 @@ scene.addEventListener("pointercancel", () => (drag = null));
 
 // ---- render loop ----
 const ctxs = {};
-for (const id of ["scene", "pad", "kernel", "coil", "exercise", "error", "bars"]) ctxs[id] = $(id).getContext("2d");
+for (const id of ["scene", "pad", "kernel", "coil", "exercise", "error", "bars", "barrier", "method", "mirrors"]) ctxs[id] = $(id).getContext("2d");
 
 function frame(ms) {
   const t = ms / 1000;
@@ -275,7 +475,7 @@ function frame(ms) {
   }
   {
     const [W, H] = fit(pad, ctxs.pad);
-    drawPad(ctxs.pad, W, H, payoff, view.front && view.front.V, MESH_S);
+    drawPad(ctxs.pad, W, H, payoff, view.front && view.front.V, MESH_S, view.barrier ? [view.barrier.L, view.barrier.U].filter(Boolean) : []);
   }
   {
     const [W, H] = fit($("kernel"), ctxs.kernel);
@@ -297,12 +497,26 @@ function frame(ms) {
     const [W, H] = fit($("bars"), ctxs.bars);
     drawBars(ctxs.bars, W, H, t, times);
   }
+  {
+    const [W, H] = fit($("barrier"), ctxs.barrier);
+    const d = view.barrier && view.front && { S: MESH_S, V: view.front.V, cf: view.cf, payoff: view.payoff, bar: view.barrier };
+    drawBarrierView(ctxs.barrier, W, H, d);
+  }
+  {
+    const [W, H] = fit($("method"), ctxs.method);
+    drawMethod(ctxs.method, W, H, view.barrier && (view.method || "T = 0 · NOTHING TO BLUR"));
+  }
+  {
+    const [W, H] = fit($("mirrors"), ctxs.mirrors);
+    drawMirrors(ctxs.mirrors, W, H, t, view.barrier && (view.mirrors || "T = 0 · NOTHING TO BLUR"));
+  }
   requestAnimationFrame(frame);
 }
 
 async function start() {
   readSliders();
   setPreset("call");
+  setBarrier("off");
   try {
     const name = await gpuInfo();
     $("fGpu").textContent = name.toUpperCase();
