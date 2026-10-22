@@ -1,0 +1,43 @@
+# Every push: the Python reference checks, then the JS core against the
+# Python fixtures, then a build of the demo pages. A check that fails exits
+# non-zero and turns the run red.
+name: checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    name: Python reference checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Vanilla blur pricer (check.py)
+        run: python reference/check.py
+      - name: Single barriers vs closed forms and QuantLib
+        run: python reference/check_barriers.py
+      - name: Double knock-out image series
+        run: python reference/check_double_barrier.py
+      - name: Greeks near the barrier, monitoring-error slopes
+        run: python reference/check_greeks_monitoring.py
+
+  node:
+    name: JS core vs Python fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: node src/test.mjs
+      - run: node src/test-barriers.mjs
+      - run: npm ci
+      - name: Build the demo, check and bench pages
+        run: npm run build
