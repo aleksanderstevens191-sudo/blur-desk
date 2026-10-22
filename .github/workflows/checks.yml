@@ -28,6 +28,10 @@ jobs:
         run: python reference/check_greeks_monitoring.py
       - name: Fat-tailed kernels vs Merton series, QuantLib, Carr-Madan
         run: python reference/check_kernels.py
+      - name: Implied-vol smile, flattening, negative-jump skew
+        run: python reference/check_smile.py
+      - name: Merton calibration recovers a synthetic chain
+        run: python reference/check_calibration.py
 
   node:
     name: JS core vs Python fixtures
