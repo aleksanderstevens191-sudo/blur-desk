@@ -1,0 +1,43 @@
+SPY option chain spy_chain_2026-10-22.csv: 54 quotes, as of 2026-10-22, SPY close 763.96
+Source: Yahoo Finance delayed quotes (uploaded by Alek). Rates: US Treasury curve, same day.
+
+Expiries used and skipped
+  2026-11-20   29 days  r 4.11%  forward 768.18 (parity, 4 strikes nearest the money)  spot net of dividends 765.68  10 OTM quotes
+  2026-12-18   57 days  r 4.15%  forward 768.11 (parity, 4 strikes nearest the money)  spot net of dividends 763.14  10 OTM quotes
+  2026-10-22  skipped: 0 days to expiry (< 5)
+  2026-10-29  skipped: fewer than 4 strikes with both a call and a put
+
+Least squares on implied vol, 20 out-of-the-money mids (puts below the forward, calls above)
+Market half-spread: mean 0.04, max 0.05 vol points
+
+  model                parameters                                         RMS     max   (vol points)
+  flat Black-Scholes   sigma 14.58%                                         1.72    3.58
+  Merton               sigma 9.57%, lam 1.67/yr, m -9.46%, delta 4.98%     0.30    0.53
+  Merton's jumps: 1.67 a year, average move -8.9% each; the market prices in a
+  crash-type jump about every 7 months. Merton prices are from the blur (Merton kernel).
+
+Per quote: market vol [bid, ask] vs model, vol points
+  2026-11-20
+      740 put   market 18.15 [18.13,18.17]   flat 14.58 (-3.58)   Merton 18.32 (+0.17)
+      750 put   market 16.77 [16.74,16.80]   flat 14.58 (-2.20)   Merton 16.62 (-0.15)
+      760 put   market 15.41 [15.39,15.44]   flat 14.58 (-0.84)   Merton 15.09 (-0.32)
+      765 put   market 14.83 [14.80,14.87]   flat 14.58 (-0.26)   Merton 14.43 (-0.40)
+      770 call  market 14.26 [14.23,14.30]   flat 14.58 (+0.31)   Merton 13.85 (-0.41)
+      775 call  market 13.72 [13.69,13.75]   flat 14.58 (+0.85)   Merton 13.35 (-0.37)
+      780 call  market 13.17 [13.13,13.20]   flat 14.58 (+1.41)   Merton 12.93 (-0.24)
+      785 call  market 12.76 [12.73,12.79]   flat 14.58 (+1.81)   Merton 12.56 (-0.20)
+      790 call  market 12.42 [12.39,12.44]   flat 14.58 (+2.16)   Merton 12.26 (-0.16)
+      795 call  market 12.15 [12.12,12.18]   flat 14.58 (+2.42)   Merton 12.00 (-0.15)
+  2026-12-18
+      740 put   market 17.84 [17.79,17.88]   flat 14.58 (-3.26)   Merton 17.56 (-0.28)
+      750 put   market 16.75 [16.70,16.79]   flat 14.58 (-2.17)   Merton 16.65 (-0.10)
+      760 put   market 15.72 [15.67,15.77]   flat 14.58 (-1.14)   Merton 15.76 (+0.04)
+      765 put   market 15.25 [15.20,15.30]   flat 14.58 (-0.67)   Merton 15.34 (+0.10)
+      770 call  market 14.79 [14.74,14.84]   flat 14.58 (-0.21)   Merton 14.95 (+0.16)
+      775 call  market 14.30 [14.25,14.35]   flat 14.58 (+0.28)   Merton 14.57 (+0.27)
+      780 call  market 13.85 [13.80,13.89]   flat 14.58 (+0.73)   Merton 14.23 (+0.38)
+      785 call  market 13.45 [13.40,13.50]   flat 14.58 (+1.13)   Merton 13.91 (+0.46)
+      790 call  market 13.11 [13.06,13.15]   flat 14.58 (+1.47)   Merton 13.62 (+0.51)
+      795 call  market 12.82 [12.78,12.86]   flat 14.58 (+1.75)   Merton 13.35 (+0.53)
+
+total time 18 s

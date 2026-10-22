@@ -5,10 +5,12 @@ Input: a CSV snapshot of one underlying's chain, one row per contract, columns
     expiry (YYYY-MM-DD), strike, type (call/put), bid, ask
 plus a header comment line "# spot=<S0> asof=<YYYY-MM-DD>" (see load_chain).
 
-Per expiry, the forward F and discount factor D come from the market itself:
-put-call parity C - P = D (F - K) is a straight line in K, fitted by least squares
-over strikes near the money where both sides trade. That absorbs dividends and
-the funding rate without guessing either. The kernels then price with spot
+Per expiry, the forward F comes from the market itself: put-call parity
+C - P = D (F - K) is a straight line in K. With no rate given, D and F are both
+fitted by least squares over strikes near the money; with a Treasury rate
+given (the right choice for American options like SPY's, see prepare), D is
+e^{-rT} and only F is read from parity. Either way dividends never need to be
+guessed. The kernels then price with spot
 S0' = D F (the spot net of dividends to expiry) and rate r = -ln(D) / T, which
 reproduces the market forward: S0' e^{rT} = F.
 
@@ -45,42 +47,95 @@ def load_chain(path):
     return spot, asof, rows
 
 
-def prepare(spot, asof, rows, min_days=5, max_abs_k=0.35, min_bid=0.05):
-    """Group by expiry, fit forward and discount from parity, keep OTM mids, invert.
+def arbitrage_violations(calls, puts):
+    """Static-arbitrage checks at executable prices (buy at the ask, sell at the bid),
+    valid for American as well as European options. Returns a list of strings.
 
-    Returns a list of slices: dict(T, D, F, S, r, K[], cp[], mid[], iv[], spread_iv[]).
+      vertical: a call (put) spread must cost between 0 and the strike gap
+      butterfly: price must be convex in strike (adjacent triples, uneven gaps)
     """
+    out = []
+    for name, book, sign in (("call", calls, -1), ("put", puts, +1)):
+        Ks = sorted(book)
+        for k1, k2 in zip(Ks, Ks[1:]):
+            lo, hi = book[k1], book[k2]
+            # sign -1: calls fall with strike, so C(k1) >= C(k2); puts rise
+            cheap, dear = (hi, lo) if sign < 0 else (lo, hi)
+            if cheap["bid"] > dear["ask"] + 1e-9:
+                out.append(f"{name} {k1:g}/{k2:g} spread below zero")
+            if dear["bid"] - cheap["ask"] > (k2 - k1) + 1e-9:
+                out.append(f"{name} {k1:g}/{k2:g} spread {dear['bid'] - cheap['ask']:.2f} > gap {k2 - k1:g}")
+        for k1, k2, k3 in zip(Ks, Ks[1:], Ks[2:]):
+            w = (k3 - k2) / (k3 - k1)
+            wings = w * book[k1]["ask"] + (1 - w) * book[k3]["ask"]
+            if wings < book[k2]["bid"] - 1e-9:
+                out.append(f"{name} butterfly {k1:g}/{k2:g}/{k3:g} at {wings - book[k2]['bid']:+.2f}")
+    return out
+
+
+def prepare(spot, asof, rows, min_days=5, max_abs_k=0.35, min_bid=0.05, rates=None,
+            screen=True, dropped=None):
+    """Group by expiry, find forward and discount, keep OTM mids, invert.
+
+    rates: None to fit the discount factor D from put-call parity along with F
+      (European options), or a function expiry -> continuously compounded rate.
+      SPY options are American: deep in-the-money puts carry an early-exercise
+      premium that tilts C - P and biases a fitted D (it can come out above 1).
+      With a rate given, D = e^{-rT} and F comes from parity at the 4 strikes
+      nearest the money only, where that premium is negligible.
+    screen: drop an expiry whose quotes contain a static arbitrage.
+    dropped: optional list that receives (expiry, reason) for skipped expiries.
+    Returns a list of slices: dict(T, D, F, S, r, K[], cp[], mid[], iv[], ...).
+    """
+    def skip(exp, why):
+        if dropped is not None:
+            dropped.append((exp, why))
+
     out = []
     for exp in sorted({r["expiry"] for r in rows}):
         T = (exp - asof).days / 365.0
         if T * 365 < min_days:
+            skip(exp, f"{T * 365:.0f} days to expiry (< {min_days})")
             continue
         q = [r for r in rows if r["expiry"] == exp and r["bid"] >= min_bid and r["ask"] > r["bid"]]
         calls = {r["K"]: r for r in q if r["cp"] == "call"}
         puts = {r["K"]: r for r in q if r["cp"] == "put"}
-        both = sorted(set(calls) & set(puts), key=lambda K: abs(K - spot))[:10]
+        if screen:
+            bad = arbitrage_violations(calls, puts)
+            if bad:
+                skip(exp, f"{len(bad)} static arbitrages, e.g. " + "; ".join(bad[:3]))
+                continue
+        mid = lambda row: 0.5 * (row["bid"] + row["ask"])
+        both = sorted(set(calls) & set(puts))
         if len(both) < 4:
+            skip(exp, "fewer than 4 strikes with both a call and a put")
             continue
-        Ks = np.array(both)
-        cmp = np.array([(calls[K]["bid"] + calls[K]["ask"]) / 2 - (puts[K]["bid"] + puts[K]["ask"]) / 2
-                        for K in both])
-        slope, icpt = np.polyfit(Ks, cmp, 1)       # C - P = D F - D K
-        D = -slope
-        F = icpt / D
-        S, r = D * F, -np.log(D) / T                # spot and rate the kernels should use
+        if rates is None:
+            near = sorted(both, key=lambda K: abs(K - spot))[:10]
+            Ks = np.array(near)
+            cmp = np.array([mid(calls[K]) - mid(puts[K]) for K in near])
+            slope, icpt = np.polyfit(Ks, cmp, 1)       # C - P = D F - D K
+            D = -slope
+            F = icpt / D
+            r = -np.log(D) / T
+        else:
+            r = rates(exp)
+            D = np.exp(-r * T)
+            near = sorted(both, key=lambda K: abs(mid(calls[K]) - mid(puts[K])))[:4]
+            F = float(np.median([K + (mid(calls[K]) - mid(puts[K])) / D for K in near]))
+        S = D * F                                      # spot net of dividends to expiry
         sl = dict(T=T, expiry=exp, D=D, F=F, S=S, r=r, K=[], cp=[], mid=[], iv=[], iv_bid=[], iv_ask=[])
         for K in sorted(set(calls) | set(puts)):
             cp = "call" if K >= F else "put"
             row = (calls if cp == "call" else puts).get(K)
             if row is None or abs(np.log(K / F)) > max_abs_k:
                 continue
-            mid = 0.5 * (row["bid"] + row["ask"])
-            iv = implied_vol(mid, S, K, T, r, cp)
+            iv = implied_vol(mid(row), S, K, T, r, cp)
             if not np.isfinite(iv):
                 continue
             sl["K"].append(K)
             sl["cp"].append(cp)
-            sl["mid"].append(mid)
+            sl["mid"].append(mid(row))
             sl["iv"].append(iv)
             sl["iv_bid"].append(implied_vol(row["bid"], S, K, T, r, cp))
             sl["iv_ask"].append(implied_vol(row["ask"], S, K, T, r, cp))
