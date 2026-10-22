@@ -228,7 +228,7 @@ function idle(ctx, W, H, text) {
   label(ctx, text, W / 2, H / 2, { size: 9, alpha: 0.4 });
 }
 
-// 07: price today against S, flat, with the barriers, the knocked region
+// 09: price today against S, flat, with the barriers, the knocked region
 // hatched, the closed form dashed under the blur price.
 export function drawBarrierView(ctx, W, H, d) {
   const l = 6;
@@ -292,7 +292,7 @@ export function drawBarrierView(ctx, W, H, d) {
   label(ctx, cf ? "AMBER BLUR · DASHED CLOSED FORM" : "AMBER BLUR · NO CLOSED FORM", W - r - 4, top + 7, { align: "right", size: 9, alpha: 0.5 });
 }
 
-// 08: |error| at S = 100 for the three methods, log scale.
+// 10: |error| at S = 100 for the three methods, log scale.
 export function drawMethod(ctx, W, H, rows) {
   if (!Array.isArray(rows)) return idle(ctx, W, H, rows || "NEEDS A BARRIER");
   const l = 88;
@@ -330,7 +330,7 @@ export function drawMethod(ctx, W, H, rows) {
   });
 }
 
-// 09: the hall of mirrors. The knock-out payoff is the payoff minus its mirror
+// 11: the hall of mirrors. The knock-out payoff is the payoff minus its mirror
 // images across the barriers. Each image is the one before it flipped about
 // the mirror's foot point, then weighted by e^{a (x_m - x)} (a = 0: plain mirror).
 // Images appear one at a time; then the kernel sweeps the corridor and the
@@ -556,4 +556,192 @@ function drawImageErrors(ctx, x, y, w, h, errs, Mnow, double) {
     }
     if (n <= 4 || M % 4 === 0 || cur) label(ctx, String(M), bx + bw * 0.32, bot + 7, { size: 8, rgb: cur ? AMBER : WHITE, alpha: cur ? 1 : 0.45 });
   });
+}
+
+// round tick values between lo and hi, about n of them
+function ticks(lo, hi, n = 4) {
+  const raw = (hi - lo) / n;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw) ?? 10 * p;
+  const out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-12; v += step) out.push(+v.toPrecision(12));
+  return out;
+}
+
+// polyline through (xs[i], ys[i]), broken where y is not finite
+function polyline(xs, ys, px, py, i0 = 0, i1 = xs.length - 1) {
+  const p = new Path2D();
+  let pen = false;
+  for (let i = i0; i <= i1; i++) {
+    if (!Number.isFinite(ys[i])) {
+      pen = false;
+      continue;
+    }
+    pen ? p.lineTo(px(xs[i]), py(ys[i])) : p.moveTo(px(xs[i]), py(ys[i]));
+    pen = true;
+  }
+  return p;
+}
+
+// 07: the kernel's density on a log scale (weights / dx) against a Gaussian
+// with the same mean and variance, which is a parabola there. Fat tails are
+// where the kernel lies above it.
+export function drawLogKernel(ctx, W, H, d) {
+  if (!d || typeof d === "string") return idle(ctx, W, H, d || "—");
+  const { y, w, dx, mean, sd } = d;
+  const l = 6;
+  const r = 6;
+  const top = 16;
+  const bot = 14;
+  const x0 = mean - 6 * sd;
+  const x1 = mean + 6 * sd;
+  let peak = 0;
+  for (let j = 0; j < w.length; j++) peak = Math.max(peak, w[j] / dx);
+  const hi = Math.log10(peak) + 0.3;
+  const lo = hi - 8.6;
+  const px = (x) => l + ((x - x0) / (x1 - x0)) * (W - l - r);
+  const py = (v) => top + (1 - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (H - top - bot);
+  const grid = new Path2D();
+  for (let k = Math.ceil(lo); k <= hi; k += 2) {
+    grid.moveTo(l, py(k));
+    grid.lineTo(W - r, py(k));
+  }
+  const sdTicks = new Path2D();
+  for (const s of [-3, 0, 3]) {
+    sdTicks.moveTo(px(mean + s * sd), H - bot);
+    sdTicks.lineTo(px(mean + s * sd), H - bot + 3);
+  }
+  glow(ctx, grid, WHITE, 0.1, 1, 0);
+  glow(ctx, sdTicks, WHITE, 0.4, 1, 0);
+  label(ctx, "−3 SD", px(mean - 3 * sd), H - 5, { size: 8, alpha: 0.45 });
+  label(ctx, "MEAN", px(mean), H - 5, { size: 8, alpha: 0.45 });
+  label(ctx, "+3 SD", px(mean + 3 * sd), H - 5, { size: 8, alpha: 0.45 });
+  // the Gaussian with the same mean and sd
+  const g = new Path2D();
+  for (let k = 0; k <= 160; k++) {
+    const x = x0 + ((x1 - x0) * k) / 160;
+    const z = (x - mean) / sd;
+    const v = -0.5 * z * z * Math.LOG10E - Math.log10(sd * Math.sqrt(2 * Math.PI));
+    k ? g.lineTo(px(x), py(v)) : g.moveTo(px(x), py(v));
+  }
+  ctx.setLineDash([4, 3]);
+  glow(ctx, g, WHITE, 0.5, 1, 0);
+  ctx.setLineDash([]);
+  // the kernel, at most ~2 points per pixel
+  const J = (w.length - 1) / 2;
+  const j0 = Math.max(0, Math.floor(x0 / dx) + J);
+  const j1 = Math.min(w.length - 1, Math.ceil(x1 / dx) + J);
+  const stride = Math.max(1, Math.floor((j1 - j0) / (2 * W)));
+  const p = new Path2D();
+  let pen = false;
+  for (let j = j0; j <= j1; j += stride) {
+    const v = w[j] > 0 ? Math.log10(w[j] / dx) : -Infinity;
+    if (v < lo) {
+      pen = false; // below the plotted range
+      continue;
+    }
+    pen ? p.lineTo(px(y[j]), py(v)) : p.moveTo(px(y[j]), py(v));
+    pen = true;
+  }
+  glow(ctx, p, AMBER, 1, 1.4, 1.1);
+  label(ctx, "AMBER KERNEL · DASHED GAUSSIAN, SAME VARIANCE", l, 6, { align: "left", size: 8, alpha: 0.5 });
+}
+
+// 08: Black-Scholes implied vol against strike from the GPU prices. Live: the
+// selected kernel at the expiry slider's T, against the flat line a Gaussian
+// kernel would give. SPY: the market's bid-ask vols at one expiry, the
+// calibrated Merton curve dashed, the live kernel solid.
+export function drawSmile(ctx, W, H, d) {
+  if (!d || typeof d === "string") return idle(ctx, W, H, d || "—");
+  const l = 34;
+  const r = 8;
+  const top = 16;
+  const bot = 16;
+  const spy = d.mode === "spy";
+  const s = d.live;
+  // x: log-moneyness k; labelled as strike / forward, or as the SPY strike in dollars
+  const kLo = spy ? d.kLo : s.k[0];
+  const kHi = spy ? d.kHi : s.k.at(-1);
+  const inRange = (sm) => {
+    let a = 0;
+    while (a < sm.k.length - 1 && sm.k[a] < kLo) a++;
+    let b = sm.k.length - 1;
+    while (b > 0 && sm.k[b] > kHi) b--;
+    return [a, b];
+  };
+  const [a, b] = inRange(s);
+  let vLo = Infinity;
+  let vHi = -Infinity;
+  const take = (v) => {
+    if (Number.isFinite(v)) {
+      vLo = Math.min(vLo, v);
+      vHi = Math.max(vHi, v);
+    }
+  };
+  for (let i = a; i <= b; i++) take(s.iv[i]);
+  if (spy) {
+    d.market.ivBid.forEach(take);
+    d.market.ivAsk.forEach(take);
+    const [fa, fb] = inRange(d.fit);
+    for (let i = fa; i <= fb; i++) take(d.fit.iv[i]);
+  }
+  if (!Number.isFinite(vLo)) return idle(ctx, W, H, "NO PRICE HERE CARRIES A VOLATILITY");
+  const pad = Math.max(0.004, 0.12 * (vHi - vLo));
+  vLo -= pad;
+  vHi += pad;
+  const px = (k) => l + ((k - kLo) / (kHi - kLo)) * (W - l - r);
+  const py = (v) => top + (1 - (v - vLo) / (vHi - vLo)) * (H - top - bot);
+  const frame = new Path2D();
+  frame.rect(l, top, W - l - r, H - top - bot);
+  glow(ctx, frame, WHITE, 0.15, 1, 0);
+  const grid = new Path2D();
+  for (const v of ticks(vLo * 100, vHi * 100, 4)) {
+    grid.moveTo(l, py(v / 100));
+    grid.lineTo(W - r, py(v / 100));
+    label(ctx, `${v}%`, l - 4, py(v / 100), { align: "right", size: 8, alpha: 0.45 });
+  }
+  const xt = spy ? ticks(d.F * Math.exp(kLo), d.F * Math.exp(kHi), 6) : ticks(100 * Math.exp(kLo), 100 * Math.exp(kHi), 6);
+  for (const v of xt) {
+    const x = px(Math.log(v / (spy ? d.F : 100)));
+    grid.moveTo(x, top);
+    grid.lineTo(x, H - bot);
+    label(ctx, spy ? `$${v}` : `${v}%`, x, H - 6, { size: 8, alpha: 0.45 });
+  }
+  glow(ctx, grid, WHITE, 0.07, 1, 0);
+  label(ctx, spy ? "SPY STRIKE" : "STRIKE / FORWARD", W - r - 2, top + 7, { align: "right", size: 8, alpha: 0.3 });
+
+  if (spy) {
+    const m = d.market;
+    const bars = new Path2D();
+    for (let i = 0; i < m.k.length; i++) {
+      const x = px(m.k[i]);
+      bars.moveTo(x, py(m.ivBid[i]));
+      bars.lineTo(x, py(m.ivAsk[i]));
+      for (const v of [m.ivBid[i], m.ivAsk[i]]) {
+        bars.moveTo(x - 3, py(v));
+        bars.lineTo(x + 3, py(v));
+      }
+    }
+    glow(ctx, bars, AMBER, 0.85, 1, 0.6);
+    ctx.fillStyle = `rgba(${AMBER},0.95)`;
+    for (let i = 0; i < m.k.length; i++) {
+      ctx.beginPath();
+      ctx.arc(px(m.k[i]), py(m.iv[i]), 2.4, 0, TAU);
+      ctx.fill();
+    }
+    const [fa, fb] = inRange(d.fit);
+    ctx.setLineDash([5, 4]);
+    glow(ctx, polyline(d.fit.k, d.fit.iv, px, py, fa, fb), WHITE, 0.6, 1, 0);
+    ctx.setLineDash([]);
+    label(ctx, "AMBER SPY BID–ASK · DASHED MERTON FIT · WHITE LIVE KERNEL", l, 6, { align: "left", size: 8, alpha: 0.5 });
+  } else {
+    const flat = new Path2D();
+    flat.moveTo(l, py(d.atm));
+    flat.lineTo(W - r, py(d.atm));
+    ctx.setLineDash([4, 4]);
+    glow(ctx, flat, WHITE, 0.4, 1, 0);
+    ctx.setLineDash([]);
+    label(ctx, "WHITE: GPU PRICES READ AS IMPLIED VOLS · DASHED: FLAT, WHAT A GAUSSIAN GIVES", l, 6, { align: "left", size: 8, alpha: 0.5 });
+  }
+  glow(ctx, polyline(s.k, s.iv, px, py, a, b), WHITE, 1, 1.5, 1.2);
 }

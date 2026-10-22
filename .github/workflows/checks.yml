@@ -46,6 +46,8 @@ jobs:
       - run: node src/test-barriers.mjs
       - name: FFT blur vs direct blur, wraparound test
         run: node src/test-fft.mjs
+      - name: Fat-tailed kernels and the smile vs Python
+        run: node src/test-kernels.mjs
       - run: npm ci
       - name: Build the demo, check and bench pages
         run: npm run build
