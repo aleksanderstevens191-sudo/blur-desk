@@ -159,5 +159,24 @@ the fat-tailed kernels on their own grids (n = m); a row = one strike at every s
 Accuracy on the Mac: every sweep case within 1e-4 near the money (max 5.3e-5). The Merton case missed:
 2.3e-4. Emulating the GPU's f32 arithmetic on the CPU put the error on the direct side: its running
 sum of 1197 block sums drifts 1.85e-4 at 38289 taps, while the FFT is off 5.6e-5. The direct shader
-now sums blocks of 32 in super-blocks of 1024 (DIRECT_WGSL in gpu-fft.js): 3.2e-5 emulated, and
-5.2e-5 on SwiftShader above. Rerun on the Mac pending.
+now sums blocks of 32 in super-blocks of 1024 (DIRECT_WGSL in gpu-fft.js): 3.2e-5 emulated. Confirmed
+on the Mac with the fixed shader (the 38289-tap case now passes at 4.58e-5):
+
+==== /check.html?only=fft on Alek's Mac (Apple GPU, Chrome), 2026-10-22, after the fix ====
+GPU: apple metal-3
+FFT convolution vs direct convolution, both on the GPU (src/fft-check.js):
+PASS n=1001  m=3     N=1024   payoffs to   91  near: |fft-direct| 1.53e-5  whole grid, scaled: |fft-exact| 1.42e-5, |direct-exact| 9.60e-6  (9 ms)
+PASS n=1001  m=401   N=2048   payoffs to   91  near: |fft-direct| 3.05e-5  whole grid, scaled: |fft-exact| 1.76e-5, |direct-exact| 2.51e-5  (6 ms)
+PASS n=2000  m=3999  N=8192   payoffs to  197  near: |fft-direct| 3.81e-5  whole grid, scaled: |fft-exact| 2.08e-5, |direct-exact| 3.04e-5  (11 ms)
+PASS n=4097  m=4097  N=16384  payoffs to  701  near: |fft-direct| 4.58e-5  whole grid, scaled: |fft-exact| 3.15e-5, |direct-exact| 3.83e-5  (19 ms)
+PASS n=5341  m=5341  N=16384  payoffs to 1370  near: |fft-direct| 4.58e-5  whole grid, scaled: |fft-exact| 4.44e-5, |direct-exact| 3.72e-5  (21 ms)
+PASS n=7087  m=7087  N=16384  payoffs to 3383  near: |fft-direct| 4.58e-5  whole grid, scaled: |fft-exact| 4.23e-5, |direct-exact| 3.83e-5  (2314 ms)
+PASS n=38289 m=38289 N=131072 payoffs to 3627  near: |fft-direct| 4.58e-5  whole grid, scaled: |fft-exact| 2.85e-5, |direct-exact| 5.16e-5  (1132 ms)
+without the split, the same FFT on the last case: whole grid, scaled |fft-exact| 6.75e-4 (the 32-bit error of the biggest payoffs spreads to every node)
+
+wraparound test: row zero except f[n-1] = 100, so the blur must be 0 on nodes i < n-1-half
+PASS padded,         N=2048 >= n+m-1=1400: max |blur| there = 3.05e-5
+PASS one size short, N=1024 <  n+m-1=1400: max |blur| there = 2.00e+2  (leak caught, as it should be)
+PASS one size short on the n=1001 m=401 payoff rows (N=1024): |fft-direct| 3.72e+1  (caught)
+
+all GPU results within 1e-4 of the Python reference, FFT within 1e-4 of direct
