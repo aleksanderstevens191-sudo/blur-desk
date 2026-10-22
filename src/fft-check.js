@@ -6,7 +6,8 @@ import { fftBlurGPU, directBlurGPU } from "./gpu-fft.js";
 import { fftSize } from "./fft.js";
 import { payoffRows, fatKernel, sentinelRow } from "./fft-cases.js";
 
-// grid nodes n, kernel taps m, spacing dx in ln S (S0 = 100 at the center)
+// grid nodes n, kernel taps m, spacing dx in ln S (S0 = 100 at the center), rows
+const ROWS = 16;
 const CASES = [
   { n: 1001, m: 3, dx: 0.001 },
   { n: 1001, m: 401, dx: 0.001 },
@@ -14,8 +15,8 @@ const CASES = [
   { n: 4097, m: 4097, dx: 0.001 },
   { n: 5341, m: 5341, dx: 0.001 }, // kernels.py's Gaussian grid at T=1: +/-2.67 in ln S
   { n: 7087, m: 7087, dx: 0.001 }, // its variance gamma grid at T=1: +/-3.56
+  { n: 38289, m: 38289, dx: 0.000189, rows: 2 }, // its Merton grid for the SPY fit, Dec 18: +/-3.62
 ];
-const ROWS = 16;
 
 const maxAbs = (a) => a.reduce((s, v) => Math.max(s, Math.abs(v)), 0);
 const maxDiff = (a, b) => a.reduce((s, v, i) => Math.max(s, Math.abs(v - b[i])), 0);
@@ -33,31 +34,31 @@ export async function fftChecks(log, TOL) {
     if (!ok) fails++;
     log(`${ok ? "PASS" : "FAIL"} ${s}`);
   };
-  log(`${ROWS} rows per case: calls and puts, strikes 74 to 135, S0 = 100 at the middle node.`);
+  log(`${ROWS} rows per case (2 on the widest): calls and puts, strikes 74 to 135, S0 = 100 at the middle node.`);
   log("The FFT blurs each row minus its a + b S part (fft.js). Pass: |fft - direct| < 1e-4 near the");
   log("money (spots S0/2 to 2 S0, where prices are read) and, over the whole grid, |fft - exact| < 1e-4");
   log("on nodes worth up to S0 and < 1e-6 of the value on deep in-the-money nodes worth more ('scaled').");
   log("32-bit floats can't hold 1e-4 on those: one f32 step at 3383 is 2.4e-4. exact = blur() in 64-bit.");
   let plain = null;
   const scaledErr = (a, ex) => a.reduce((s, v, i) => Math.max(s, Math.abs(v - ex[i]) / Math.max(1, Math.abs(ex[i]) / 100)), 0);
-  for (const { n, m, dx } of CASES) {
-    const { F, center } = payoffRows({ n, dx, rows: ROWS });
+  for (const { n, m, dx, rows = ROWS } of CASES) {
+    const { F, center } = payoffRows({ n, dx, rows });
     const k = fatKernel(m);
     const t0 = performance.now();
-    const fft = await fftBlurGPU(F, ROWS, n, k, { dx });
-    const dir = await directBlurGPU(F, ROWS, n, k);
+    const fft = await fftBlurGPU(F, rows, n, k, { dx });
+    const dir = await directBlurGPU(F, rows, n, k);
     const ms = performance.now() - t0;
-    const ex = exact(F, ROWS, n, k);
+    const ex = exact(F, rows, n, k);
     const w = Math.round(Math.LN2 / dx);
     let near = 0;
-    for (let r = 0; r < ROWS; r++) {
+    for (let r = 0; r < rows; r++) {
       for (let i = Math.max(0, center - w); i <= Math.min(n - 1, center + w); i++) near = Math.max(near, Math.abs(fft[r * n + i] - dir[r * n + i]));
     }
     const sf = scaledErr(fft, ex);
-    line(near < TOL && sf < TOL, `n=${String(n).padEnd(5)} m=${String(m).padEnd(5)} N=${String(fftSize(n, m)).padEnd(6)}` +
+    line(near < TOL && sf < TOL, `n=${String(n).padEnd(5)} m=${String(m).padEnd(5)} N=${String(fftSize(n, m)).padEnd(7)}` +
       `payoffs to ${maxAbs(F).toFixed(0).padStart(4)}  near: |fft-direct| ${e(near)}` +
       `  whole grid, scaled: |fft-exact| ${e(sf)}, |direct-exact| ${e(scaledErr(dir, ex))}  (${ms.toFixed(0)} ms)`);
-    if (n === CASES.at(-1).n) plain = scaledErr(await fftBlurGPU(F, ROWS, n, k), ex);
+    if (n === CASES.at(-1).n) plain = scaledErr(await fftBlurGPU(F, rows, n, k), ex);
   }
   log(`without the split, the same FFT on the last case: whole grid, scaled |fft-exact| ${e(plain)}` +
     " (the 32-bit error of the biggest payoffs spreads to every node)");

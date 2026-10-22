@@ -51,10 +51,10 @@ cr = [c for c in d["crossover"] if c["mStar"] is not None]
 n = np.array([c["n"] for c in cr])
 ms = np.array([c["mStar"] for c in cr])
 ax.loglog(n, ms, "-o", color="white", lw=1.4, ms=4, label="crossover m*(n)")
-for c in d.get("realistic", []):
+for i, c in enumerate(d.get("realistic", [])):
     ax.plot(c["n"], c["m"], "s", color="white", ms=5, mfc="none")
     ax.annotate(f"{c['what']}: FFT {c['directMs'] / c['fftMs']:.0f}x", (c["n"], c["m"]),
-                textcoords="offset points", xytext=(-8, -12), ha="right", color="white",
+                textcoords="offset points", xytext=(-8, 6 if i % 2 else -12), ha="right", color="white",
                 fontsize=7, family="monospace")
 ax.set_title("FFT WINS ABOVE THE LINE; SQUARES: THE KERNELS WE USE", **mono)
 ax.set_xlabel("grid size n (nodes)", family="monospace")

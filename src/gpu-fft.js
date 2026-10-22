@@ -3,9 +3,9 @@
 // One submit does: pack the rows (reflected edges written out, two real rows
 // per complex row, the reversed kernel as one more row), forward FFT of all
 // of them, multiply by the kernel's transform, inverse FFT, unpack.
-// The direct blur it is compared with is ROWS_WGSL from gpu.js, the shader the
-// barrier step-pricer already uses (blocked sums, odd-reflection edges).
-import { context, storage, uniform, readback, groups, ROWS_WGSL } from "./gpu.js";
+// The direct blur it is compared with is DIRECT_WGSL below: ROWS_WGSL from
+// gpu.js (the barrier step-pricer's shader) with a second level of blocking.
+import { context, storage, uniform, readback, groups } from "./gpu.js";
 import { fftSize, radices, twiddles, expSplit, expBlur } from "./fft.js";
 
 const WG = 64;
@@ -150,6 +150,57 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 `;
 
+// ROWS_WGSL with sums in blocks of 32 taps, blocks summed in super-blocks of
+// 1024, super-blocks summed last. One level of blocks is enough for the
+// barrier kernels (~1600 taps), but on the 38k-tap Merton kernel the running
+// sum of 1200 block sums drifts by ~2e-4 (measured on the Mac). Two levels
+// keep it near 3e-5 at the same speed.
+export const DIRECT_WGSL = /* wgsl */ `
+struct Params { n: u32, rows: u32, half: u32, p0: u32 }
+const BLOCK = 32u;
+const SUPER = 1024u;
+@group(0) @binding(0) var<uniform> p: Params;
+@group(0) @binding(1) var<storage, read> f: array<f32>;
+@group(0) @binding(2) var<storage, read> k: array<f32>;
+@group(0) @binding(3) var<storage, read_write> out: array<f32>;
+
+fn at(row: u32, i: i32) -> f32 {
+  let n = i32(p.n);
+  let b = row * p.n;
+  if (i < 0) { return 2.0 * f[b] - f[b + u32(-i)]; }
+  if (i >= n) { return 2.0 * f[b + u32(n - 1)] - f[b + u32(2 * (n - 1) - i)]; }
+  return f[b + u32(i)];
+}
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nwg: vec3<u32>) {
+  let t = gid.x + gid.y * nwg.x * 64u;
+  let row = t / p.n;
+  let i = t % p.n;
+  if (row >= p.rows) { return; }
+  let m = 2u * p.half + 1u;
+  let base = i32(i) - i32(p.half);
+  let interior = base >= 0 && base + i32(m) <= i32(p.n);
+  var s = 0.0;
+  for (var J0 = 0u; J0 < m; J0 += SUPER) {
+    let J1 = min(J0 + SUPER, m);
+    var sb = 0.0;
+    for (var j0 = J0; j0 < J1; j0 += BLOCK) {
+      let j1 = min(j0 + BLOCK, J1);
+      var b = 0.0;
+      for (var j = j0; j < j1; j++) {
+        var v: f32;
+        if (interior) { v = f[row * p.n + u32(base) + j]; } else { v = at(row, base + i32(j)); }
+        b += k[j] * v;
+      }
+      sb += b;
+    }
+    s += sb;
+  }
+  out[row * p.n + i] = s;
+}
+`;
+
 function checkShape(rows, n, m) {
   if (m % 2 !== 1) throw new Error("kernel length must be odd");
   if ((m - 1) / 2 >= n) throw new Error("kernel wider than grid; widen the grid");
@@ -252,12 +303,12 @@ export async function fftBlurJob({ F, rows, n, kernel, N, dx }) {
   };
 }
 
-// The same rows blurred directly (ROWS_WGSL: n m taps per row), same interface.
+// The same rows blurred directly (DIRECT_WGSL: n m taps per row), same interface.
 export async function directBlurJob({ F, rows, n, kernel }) {
   const m = kernel.length;
   checkShape(rows, n, m);
   const { device, pipelineFor } = await context();
-  const pipe = pipelineFor(ROWS_WGSL);
+  const pipe = pipelineFor(DIRECT_WGSL);
   const bufs = {
     u: uniform(device, new Uint32Array([n, rows, (m - 1) / 2, 0])),
     f: storage(device, Float32Array.from(F)),

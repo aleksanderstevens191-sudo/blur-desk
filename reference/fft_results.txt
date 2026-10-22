@@ -1,6 +1,6 @@
 Stage 3: FFT convolution vs direct convolution on the GPU (WebGPU / WGSL)
-Run in this container on Chromium's software WebGPU adapter (SwiftShader, no real GPU).
-Timings here are NOT GPU timings; the Apple GPU numbers come from /fft-bench.html on Alek's Mac.
+Correctness runs in this container on Chromium's software WebGPU adapter (SwiftShader, no real GPU);
+the timings are from /fft-bench.html on Alek's Mac (Apple GPU), at the end.
 
 ==== node src/test-fft.mjs: the 64-bit twin of the WGSL (src/fft.js) vs blur() ====
 FFT blur vs blur(), 64-bit, payoff rows (calls and puts); error relative to the largest value
@@ -30,21 +30,22 @@ PASS n=300 m=599 payoff rows, one size short N=512: |fft - blur()| 9.1e+1 (caugh
 PASS n=1001 m=401 payoff rows, one size short N=1024: |fft - blur()| 3.7e+1 (caught)
 all FFT checks pass
 
-==== /check.html (FFT section): GPU FFT (f32) vs GPU direct (f32) vs exact blur (f64) ====
+==== /check.html?only=fft: GPU FFT (f32) vs GPU direct (f32) vs exact blur (f64), SwiftShader ====
 GPU: google swiftshader
 FFT convolution vs direct convolution, both on the GPU (src/fft-check.js):
-16 rows per case: calls and puts, strikes 74 to 135, S0 = 100 at the middle node.
+16 rows per case (2 on the widest): calls and puts, strikes 74 to 135, S0 = 100 at the middle node.
 The FFT blurs each row minus its a + b S part (fft.js). Pass: |fft - direct| < 1e-4 near the
 money (spots S0/2 to 2 S0, where prices are read) and, over the whole grid, |fft - exact| < 1e-4
 on nodes worth up to S0 and < 1e-6 of the value on deep in-the-money nodes worth more ('scaled').
 32-bit floats can't hold 1e-4 on those: one f32 step at 3383 is 2.4e-4. exact = blur() in 64-bit.
-PASS n=1001  m=3     N=1024  payoffs to   91  near: |fft-direct| 1.55e-5  whole grid, scaled: |fft-exact| 1.53e-5, |direct-exact| 1.07e-5  (80 ms)
-PASS n=1001  m=401   N=2048  payoffs to   91  near: |fft-direct| 3.05e-5  whole grid, scaled: |fft-exact| 2.08e-5, |direct-exact| 2.72e-5  (62 ms)
-PASS n=2000  m=3999  N=8192  payoffs to  197  near: |fft-direct| 6.10e-5  whole grid, scaled: |fft-exact| 2.32e-5, |direct-exact| 5.46e-5  (1056 ms)
-PASS n=4097  m=4097  N=16384 payoffs to  701  near: |fft-direct| 7.63e-5  whole grid, scaled: |fft-exact| 3.61e-5, |direct-exact| 7.79e-5  (2076 ms)
-PASS n=5341  m=5341  N=16384 payoffs to 1370  near: |fft-direct| 6.87e-5  whole grid, scaled: |fft-exact| 4.83e-5, |direct-exact| 8.44e-5  (3359 ms)
-PASS n=7087  m=7087  N=16384 payoffs to 3383  near: |fft-direct| 7.63e-5  whole grid, scaled: |fft-exact| 5.42e-5, |direct-exact| 1.14e-4  (6089 ms)
-without the split, the same FFT on the last case: whole grid, scaled |fft-exact| 1.22e-3 (the 32-bit error of the biggest payoffs spreads to every node)
+PASS n=1001  m=3     N=1024   payoffs to   91  near: |fft-direct| 1.55e-5  whole grid, scaled: |fft-exact| 1.53e-5, |direct-exact| 1.07e-5  (218 ms)
+PASS n=1001  m=401   N=2048   payoffs to   91  near: |fft-direct| 3.05e-5  whole grid, scaled: |fft-exact| 2.08e-5, |direct-exact| 2.72e-5  (81 ms)
+PASS n=2000  m=3999  N=8192   payoffs to  197  near: |fft-direct| 3.05e-5  whole grid, scaled: |fft-exact| 2.32e-5, |direct-exact| 2.69e-5  (1105 ms)
+PASS n=4097  m=4097  N=16384  payoffs to  701  near: |fft-direct| 3.81e-5  whole grid, scaled: |fft-exact| 3.61e-5, |direct-exact| 3.50e-5  (2146 ms)
+PASS n=5341  m=5341  N=16384  payoffs to 1370  near: |fft-direct| 4.77e-5  whole grid, scaled: |fft-exact| 4.83e-5, |direct-exact| 3.43e-5  (3516 ms)
+PASS n=7087  m=7087  N=16384  payoffs to 3383  near: |fft-direct| 5.72e-5  whole grid, scaled: |fft-exact| 5.42e-5, |direct-exact| 4.14e-5  (6280 ms)
+PASS n=38289 m=38289 N=131072 payoffs to 3627  near: |fft-direct| 6.10e-5  whole grid, scaled: |fft-exact| 3.30e-5, |direct-exact| 5.16e-5  (22053 ms)
+without the split, the same FFT on the last case: whole grid, scaled |fft-exact| 8.42e-4 (the 32-bit error of the biggest payoffs spreads to every node)
 
 wraparound test: row zero except f[n-1] = 100, so the blur must be 0 on nodes i < n-1-half
 PASS padded,         N=2048 >= n+m-1=1400: max |blur| there = 2.29e-5
@@ -53,65 +54,110 @@ PASS one size short on the n=1001 m=401 payoff rows (N=1024): |fft-direct| 3.72e
 
 all GPU results within 1e-4 of the Python reference, FFT within 1e-4 of direct
 
-==== /fft-bench.html?quick=1&nmax=12 on SwiftShader (shape of the method only; JSON in fft_bench_swiftshader.json) ====
-GPU: google swiftshader
-each batch: rows x n = 32,768 payoff values (calls and puts), one kernel of m taps;
-FFT length N = nextPow2(n + m - 1) (padded, no wraparound); times are ms per batch, GPU work only
-(payoffs and kernel uploaded once; the FFT includes transforming the kernel every batch).
+==== /fft-bench.html on Alek's Mac (Apple GPU, Chrome), 2026-10-22, from fft_bench_apple.json ====
+GPU: apple metal-3; each batch rows x n = 1,048,576 payoff values; ms per batch, GPU work only
+(direct here was the one-level blocked shader of the first push; timings are unaffected by the fix below)
 
-n = 256 (128 rows)        m   direct ms      fft ms   direct/fft   |fft-direct| near the money
-                        3     2.30        5.70        0.40   2.9e-5
-                        7     4.20        5.70        0.74   3.1e-5
-                       15     6.30        4.70        1.34   3.8e-5
-                       31     8.70        6.80        1.28   4.6e-5
-                       63    17.60        4.70        3.74   3.8e-5
-  crossover: FFT faster from m ~ 10 taps
+crossover m*: the kernel width above which the FFT is faster
+  n =    256   m* = 41
+  n =    512   m* = 42
+  n =   1024   m* = 46
+  n =   2048   m* = 29
+  n =   4096   m* = 61
+  n =   8192   m* = 56
+  n =  16384   m* = 66
+  n =  32768   m* = 76
+  n =  65536   m* = 90
 
-n = 512 (64 rows)        m   direct ms      fft ms   direct/fft   |fft-direct| near the money
-                        3     2.30        4.60        0.50   3.1e-5
-                        7     3.30        4.40        0.75   3.8e-5
-                       15     6.80        4.40        1.55   5.3e-5
-                       31     7.80        5.60        1.39   3.4e-5
-                       63    17.50        4.80        3.65   3.8e-5
-  crossover: FFT faster from m ~ 9 taps
+   n      m   direct ms   fft ms   direct/fft
+   256      3      0.244    0.577       0.42
+   256      7      0.161    0.588       0.27
+   256     15      0.352    0.561       0.63
+   256     31      0.465    0.629       0.74
+   256     63      0.892    0.576       1.55
+   256    127      2.100    0.588       3.57
+   256    255     41.975    7.900       5.31
+   256    511     16.133    1.479      10.91
+   512      3      0.087    0.600       0.14
+   512      7      0.149    0.584       0.26
+   512     15      0.304    0.919       0.33
+   512     31      0.438    0.571       0.77
+   512     63      0.892    0.613       1.45
+   512    127      1.850    0.570       3.24
+   512    255      4.660    0.597       7.81
+   512    511     11.400    0.591      19.28
+  1024      3      0.103    0.756       0.14
+  1024      7      0.153    0.676       0.23
+  1024     15      0.276    0.746       0.37
+  1024     31      0.454    0.658       0.69
+  1024     63      0.927    0.688       1.35
+  1024    127      1.775    0.703       2.52
+  1024    255      4.050    0.684       5.92
+  1024    511      9.840    0.693      14.21
+  2048      3      0.129    0.709       0.18
+  2048      7      0.152    0.692       0.22
+  2048     15      0.271    0.666       0.41
+  2048     31      1.024    0.921       1.11
+  2048     63      0.672    0.623       1.08
+  2048    127      1.235    0.648       1.91
+  2048    255      2.833    0.705       4.02
+  2048    511      6.533    0.668       9.78
+  4096      3      0.081    0.785       0.10
+  4096      7      0.138    0.771       0.18
+  4096     15      0.257    0.880       0.29
+  4096     31      0.418    0.765       0.55
+  4096     63      0.848    0.822       1.03
+  4096    127      1.769    0.771       2.29
+  4096    255      3.575    0.770       4.64
+  4096    511      7.833    0.787       9.95
+  8192      3      0.103    0.800       0.13
+  8192      7      0.153    0.900       0.17
+  8192     15      0.268    0.841       0.32
+  8192     31      0.445    0.796       0.56
+  8192     63      0.903    0.805       1.12
+  8192    127      1.844    0.771       2.39
+  8192    255      3.880    0.812       4.78
+  8192    511      8.183    0.785      10.42
+ 16384      3      0.173    0.892       0.19
+ 16384      7      0.159    0.952       0.17
+ 16384     15      0.244    0.877       0.28
+ 16384     31      0.465    0.904       0.51
+ 16384     63      0.840    0.877       0.96
+ 16384    127      1.658    0.908       1.83
+ 16384    255      3.527    0.890       3.96
+ 16384    511      7.683    0.934       8.22
+ 32768      3      0.280    0.937       0.30
+ 32768      7      0.200    0.992       0.20
+ 32768     15      0.210    0.929       0.23
+ 32768     31      0.494    0.913       0.54
+ 32768     63      0.840    0.986       0.85
+ 32768    127      1.544    0.987       1.56
+ 32768    255      3.910    1.043       3.75
+ 32768    511      6.486    0.973       6.67
+ 32768   1023     11.725    0.927      12.65
+ 65536      3      0.088    1.154       0.08
+ 65536      7      0.152    1.050       0.14
+ 65536     15      0.228    1.106       0.21
+ 65536     31      0.409    1.104       0.37
+ 65536     63      0.789    1.108       0.71
+ 65536    127      1.467    1.063       1.38
+ 65536    255      2.950    1.118       2.64
+ 65536    511      6.283    1.153       5.45
+ 65536   1023     14.200    1.152      12.33
 
-n = 1024 (32 rows)        m   direct ms      fft ms   direct/fft   |fft-direct| near the money
-                        3     2.50        5.50        0.45   2.8e-5
-                        7     3.70        4.60        0.80   3.1e-5
-                       15     5.60        4.60        1.22   3.8e-5
-                       31     8.80        4.50        1.96   3.4e-5
-                       63    17.90        5.80        3.09   3.1e-5
-  crossover: FFT faster from m ~ 10 taps
+the fat-tailed kernels on their own grids (n = m); a row = one strike at every spot, a price = one strike at one spot
+  Gaussian, T=1              direct   133.90 ms per 196 rows ->     1,464 strikes/sec,      7.8M prices/sec
+  Gaussian, T=1              FFT        1.35 ms per 196 rows ->   145,725 strikes/sec,    778.3M prices/sec
+                             FFT 100x faster, N=16384, |fft-direct| near the money 9.2e-05
+  variance gamma, T=1        direct   168.80 ms per 148 rows ->       877 strikes/sec,      6.2M prices/sec
+  variance gamma, T=1        FFT        0.89 ms per 148 rows ->   166,049 strikes/sec,   1176.8M prices/sec
+                             FFT 189x faster, N=16384, |fft-direct| near the money 9.2e-05
+  Merton (SPY fit), Dec 18   direct   921.10 ms per  28 rows ->        30 strikes/sec,      1.2M prices/sec
+  Merton (SPY fit), Dec 18   FFT        2.32 ms per  28 rows ->    12,093 strikes/sec,    463.0M prices/sec
+                             FFT 398x faster, N=131072, |fft-direct| near the money 2.3e-04
 
-n = 2048 (16 rows)        m   direct ms      fft ms   direct/fft   |fft-direct| near the money
-                        3     2.40        5.80        0.41   3.1e-5
-                        7     3.40        5.60        0.61   3.8e-5
-                       15     6.80        5.70        1.19   3.8e-5
-                       31     9.10        5.60        1.62   3.8e-5
-                       63    18.80        5.70        3.30   3.1e-5
-  crossover: FFT faster from m ~ 12 taps
-
-n = 4096 (8 rows)        m   direct ms      fft ms   direct/fft   |fft-direct| near the money
-                        3     2.30       10.60        0.22   3.1e-5
-                        7     5.10        5.50        0.93   3.4e-5
-                       15     5.50        7.00        0.79   3.8e-5
-                       31     9.90        6.70        1.48   3.8e-5
-                       63    16.50        5.50        3.00   3.8e-5
-                      127    41.00        7.00        5.86   3.1e-5
-  crossover: FFT faster from m ~ 20 taps
-
-crossover m* by grid size:
-  n =    256   m* = 10
-  n =    512   m* = 9
-  n =   1024   m* = 10
-  n =   2048   m* = 12
-  n =   4096   m* = 20
-
-options/sec at the sizes the fat-tailed kernels use (grid = kernel width, n = m):
-one row = one strike priced at every spot on the grid; a price = one strike at one spot
-  Gaussian, T=1              direct      456 ms per 2 rows ->    0.0k strikes/sec,   23.5k prices/sec
-  Gaussian, T=1              FFT        3.50 ms per 2 rows ->    0.6k strikes/sec,    3.1M prices/sec
-                             FFT 130.1x faster, N=16384, |fft-direct| near the money 6.9e-5
-
-all FFT results within 1e-4 of direct near the money
-
+Accuracy on the Mac: every sweep case within 1e-4 near the money (max 5.3e-5). The Merton case missed:
+2.3e-4. Emulating the GPU's f32 arithmetic on the CPU put the error on the direct side: its running
+sum of 1197 block sums drifts 1.85e-4 at 38289 taps, while the FFT is off 5.6e-5. The direct shader
+now sums blocks of 32 in super-blocks of 1024 (DIRECT_WGSL in gpu-fft.js): 3.2e-5 emulated, and
+5.2e-5 on SwiftShader above. Rerun on the Mac pending.
