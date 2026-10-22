@@ -1,0 +1,60 @@
+========================================================================
+1) Up-and-out call near its barrier: Greeks off the blurred surface
+========================================================================
+  K=100, H=120, sigma=0.2, r=0.05; one blur prices every spot, dx = 0.0005 in ln S
+  delta = V_x / S, gamma = (V_xx - V_x) / S^2 from neighbouring grid nodes
+
+       T  delta<0 from  delta at H-  min gamma    at S  vanilla peak  |ratio|  |delta err|  |gamma err|
+     1.0      S = 95.9       -0.069     -0.006   97.08        0.0218     0.3x      2.1e-07      4.6e-08
+    0.25     S = 106.5       -0.428     -0.052  108.31        0.0408     1.3x      4.1e-06      3.5e-07
+    0.05      S = 69.8       -1.933     -0.347  114.26        0.0896     3.9x      6.0e-05      7.9e-06
+    0.01      S = 85.1       -5.565     -1.697  117.51        0.1996     8.5x      6.3e-04      2.0e-04
+   0.002      S = 93.0      -13.746     -8.423  118.92        0.4460    18.9x      4.1e-03      4.8e-03
+  measured scaling as expiry nears: barrier |gamma| peak ~ T^-1.15, vanilla gamma peak ~ T^-0.49
+  at half a trading day (T=0.002) the barrier's gamma is 19x the vanilla's and its delta just below H is -13.7
+  Delta turns negative below the barrier: near H, a rise in the stock brings the option
+  closer to dying. Gamma near H is large and negative and grows like 1/T, because the
+  price has to fall from ~$20 of intrinsic value to 0 across a distance ~ sigma sqrt(T);
+  a vanilla call's gamma grows only like 1/sqrt(T). A hedger just below H half a day out is
+  short ~14 shares per option, and must buy them all back the instant it knocks out.
+  plot: docs/barrier_greeks.png
+
+========================================================================
+2) Discrete-monitoring error vs number of steps (log-log)
+========================================================================
+  step-by-step blur, monitored at T/N, ..., T; error vs the continuous closed form
+  sigma=0.2, r=0.05, T=1.0; slope = least-squares fit of log|error| on log N for N >= 40
+
+  UOC K=100 H=120 (payoff $20 at H): continuous price 1.176065
+       N    no shift  local    BGK shift  local
+      10   7.336e-01          -1.140e-01       
+      20   5.271e-01  -0.48   -5.927e-02  -0.94
+      40   3.758e-01  -0.49   -3.044e-02  -0.96
+      80   2.668e-01  -0.49   -1.550e-02  -0.97
+     160   1.890e-01  -0.50   -7.852e-03  -0.98
+     320   1.338e-01  -0.50   -3.961e-03  -0.99
+     640   9.463e-02  -0.50   -1.993e-03  -0.99
+    1280   6.693e-02  -0.50   -1.001e-03  -0.99
+  measured slope: no shift -0.498, with shift -0.986
+  grid check at N=1280 with shift: error -1.001e-03 at dx<=0.0005, -1.001e-03 at dx<=0.00025
+
+  DOC K=100 H=90 (payoff 0 at H): continuous price 8.665472
+       N    no shift  local    BGK shift  local
+      10   9.671e-01           6.654e-03       
+      20   7.522e-01  -0.36   -5.550e-03  -0.26
+      40   5.678e-01  -0.41   -7.170e-04  -2.95
+      80   4.202e-01  -0.43   -2.876e-04  -1.32
+     160   3.069e-01  -0.45   -1.005e-04  -1.52
+     320   2.220e-01  -0.47   -3.554e-05  -1.50
+     640   1.595e-01  -0.48   -1.258e-05  -1.50
+    1280   1.141e-01  -0.48   -4.497e-06  -1.48
+  measured slope: no shift -0.464, with shift -1.475
+  grid check at N=1280 with shift: error -4.497e-06 at dx<=0.0005, -4.445e-06 at dx<=0.00025
+
+  Without the shift the error falls like N^-1/2, as expected: a path can cross the barrier
+  and come back between monitoring dates, and the overshoot is ~ sigma sqrt(dt).
+  The shift removes that leading term. What is left depends on the payoff at the barrier:
+  N^-1 when the payoff is still worth something there (UOC, K < H), N^-3/2 when it is 0 (DOC).
+  plot: docs/monitoring_convergence.png
+
+all stage 3 checks passed

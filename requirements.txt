@@ -2,3 +2,4 @@ numpy
 scipy
 QuantLib
 mpmath
+matplotlib
