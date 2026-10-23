@@ -17,6 +17,8 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT / "reference"))
+from kernels import merton_series
 SNAP = ROOT / "data" / "spy_full_2026-10-23"
 fails = 0
 
@@ -58,10 +60,19 @@ for a, b in zip(new2["expiries"], old2["expiries"]):
 check(dp < 1e-4, f"Merton parameters of {len(new2['expiries'])} expiries, max relative change {dp:.1e} (< 1e-4)")
 dr = max(abs(a["merton"]["rms"] - b["merton"]["rms"]) for a, b in zip(new2["expiries"], old2["expiries"]))
 check(dr < 1e-3, f"fit errors, max change {dr:.1e} vol points (< 1e-3)")
-for name in ("bs_ql", "merton"):
+# the least-squares fit stops a little differently on other numpy/scipy builds (1.6e-6 dollars on
+# GitHub's runner), so the refit's Merton prices get the project's 1e-4 and the committed prices are
+# checked exactly against the committed fit instead
+for name, tol in (("bs_ql", 1e-6), ("merton", 1e-4)):
     a, b = np.array(new2["contracts"][name]), np.array(old2["contracts"][name])
     d = np.max(np.abs(a - b)) if a.shape == b.shape else np.inf
-    check(d < 1e-6, f"reference prices '{name}', {len(a)} contracts, max change {d:.1e} dollars (< 1e-6)")
+    check(d < tol, f"reference prices '{name}', {len(a)} contracts, max change {d:.1e} dollars (< {tol:.0e})")
+c, ex = old2["contracts"], old2["expiries"]
+again = np.array([float(merton_series(ex[e]["D"] * ex[e]["F"], K, ex[e]["T"], ex[e]["r"], *(ex[e]["merton"][k] for k in
+                  ("sigma", "lam", "m", "delta")), cp="call" if call else "put")) for e, K, call in zip(c["e"], c["K"], c["call"])])
+d = np.max(np.abs(again - np.array(c["merton"])))
+check(d < 1e-10, f"committed 'merton' prices from the committed fit, {len(again)} contracts, max |diff| {d:.1e} dollars "
+      "(< 1e-10)")
 print("\n" + "\n".join(l for l in fit_report.splitlines() if l.startswith("  all expiries:")))
 print(f"\n{'all match' if not fails else f'{fails} failed'}")
 sys.exit(1 if fails else 0)
