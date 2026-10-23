@@ -219,7 +219,7 @@ The premium is about zero for calls (median $0.000) and small for out-of-the-mon
 | `/check.html?only=chain`, every contract | Apple GPU (Metal-3) | software GPU (CI) |
 | --- | --- | --- |
 | Black-Scholes, own vol, vs QuantLib `BlackCalculator` | 7.1e-6 dollars | 7.1e-6 dollars |
-| Merton vs Merton's series | 6.1e-6 dollars (before the fit fix below) | 5.4e-6 dollars |
+| Merton vs Merton's series | 4.7e-6 dollars | 5.4e-6 dollars |
 
 The tolerance is 1e-4. `node src/test-chain.mjs` runs the same jobs in 64-bit on the CPU: 3.5e-13 and 2.3e-10.
 
@@ -229,12 +229,12 @@ Alek's Mac (Apple GPU, 14 CPU cores, Chrome 155, QuantLib 1.44) with all 4,738 c
 
 | | Black-Scholes, own vol | Merton per expiry |
 | --- | ---: | ---: |
-| QuantLib, 1 thread | 12.9 ms (367,000/s) | 259.5 ms (18,300/s) |
-| QuantLib, 14 cores | 2.4 ms (1.99M/s) | 61.5 ms (77,000/s) |
-| GPU, compute only | 0.35 ms (13.5M/s) | 1.60 ms (2.96M/s) |
-| GPU, end to end | 39.3 ms (121,000/s) | 61.3 ms (77,400/s) |
-| GPU compute vs QuantLib, 1 thread / 14 cores | 37x / 6.8x | 162x / 38.5x |
-| GPU end to end vs QuantLib, 1 thread / 14 cores | 0.3x / 0.06x | 4.2x / 1.0x |
+| QuantLib, 1 thread | 8.8 ms (536,000/s) | 169.9 ms (27,900/s) |
+| QuantLib, 14 cores | 1.7 ms (2.81M/s) | 45.8 ms (103,000/s) |
+| GPU, compute only | 0.40 ms (11.8M/s) | 1.20 ms (3.95M/s) |
+| GPU, end to end | 27.6 ms (172,000/s) | 33.3 ms (142,000/s) |
+| GPU compute vs QuantLib, 1 thread / 14 cores | 22x / 4.2x | 142x / 38x |
+| GPU end to end vs QuantLib, 1 thread / 14 cores | 0.3x / 0.06x | 5.1x / 1.4x |
 
 - QuantLib's Python bindings have no Merton engine, so Merton runs on its Bates engine with the vol of vol pinned at 1e-5 (`reference/bench_chain_quantlib.py`).
 - End to end covers everything:
@@ -242,9 +242,10 @@ Alek's Mac (Apple GPU, 14 CPU cores, Chrome 155, QuantLib 1.44) with all 4,738 c
   - a fresh shader compile;
   - upload, run and read back;
   - parity for the in-the-money side.
-- The build takes 35-56 ms on one CPU thread. The GPU's own share is 1.8-3.2 ms.
-- The pricing itself is 6.8 times (Black-Scholes) and 38.5 times (Merton) faster than QuantLib on all 14 cores. End to end, the GPU loses to QuantLib's closed-form Black-Scholes, ties 14 cores on Merton, and beats one core on Merton 4 times over.
-- The Merton column was measured with the fit before the fix below. The fixed fit needs 30.6M kernel taps instead of 38.0M, so compute time should drop a little; the rerun is pending.
+- The build takes 25-30 ms on one CPU thread. The GPU's own share is 1.4-2.2 ms.
+- The pricing itself is 4.2 times (Black-Scholes) and 38 times (Merton) faster than QuantLib on all 14 cores. End to end, the GPU loses to QuantLib's closed-form Black-Scholes, and on Merton it beats 14 cores 1.4 times over and one core 5 times over.
+- Browser timers tick in 0.1 ms steps, so the Black-Scholes compute time, and its ratio, is only good to about 25%.
+- Both sides were run in one session, with the corrected fit. An earlier run (before the fit fix) had Black-Scholes, which does identical work in both runs, about 30% slower on QuantLib and on the GPU end to end alike: the machine was in a slower state. So compare the two sides within a run, as here, and treat run-to-run changes of that size as noise. Both runs are in `reference/chain_bench_results.txt`.
 
 ### How well Merton fits, in and out of sample
 
@@ -296,7 +297,7 @@ Every push runs four jobs (`.github/workflows/checks.yml`); any failure turns th
 | Job | What it checks |
 | --- | --- |
 | Python reference | `check.py`, the three barrier checks, and for fat tails: `check_kernels.py` (the table above), `check_smile.py` (no smile from a Gaussian, flattening with maturity, the negative-jump skew), `check_calibration.py` (the synthetic chain) and `check_spy_fit.py` (re-runs the SPY fit from the committed snapshot: it must reproduce `src/spy_fit.json`, beat flat Black-Scholes at least 4 times, stay within 1 vol point of every quote and fit a negative mean jump) |
-| Full SPY chain | `check_chain_fit.py` reruns the whole pipeline from the saved snapshot (filters, parity forwards with early exercise, European vols, the Merton fit per expiry and the reference prices) and must reproduce the committed `stage1.json` and `src/chain_data.json`; `chain_oos.py --check` must reproduce every out-of-sample number. About 7 minutes |
+| Full SPY chain | `check_chain_fit.py` reruns the whole pipeline from the saved snapshot (filters, parity forwards with early exercise, European vols, the Merton fit per expiry and the reference prices) and must reproduce the committed `stage1.json` and `src/chain_data.json`; `chain_oos.py --check` must reproduce every out-of-sample number. About 4 minutes |
 | JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves) and `test-chain.mjs` (the whole chain's jobs vs QuantLib and Merton's series), then a build of every page |
 | WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, the fat-tailed kernels and smile, and the whole SPY chain in one submit, all in 32-bit floats within 1e-4 of Python |
 
