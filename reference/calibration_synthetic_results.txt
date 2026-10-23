@@ -1,0 +1,14 @@
+synthetic chain: 896 quotes, 7 expiries, 378 out-of-the-money mids kept
+forward from put-call parity vs true forward: max relative error 8.8e-05   PASS
+
+               sigma     lam      m        delta
+  true         0.1100   0.9000  -0.0900   0.1200
+  fitted       0.1100   0.8995  -0.0900   0.1200
+  max parameter error 5.1e-04   PASS
+
+  fit error, implied vol points       RMS      max
+  flat Black-Scholes (20.8%)        7.94    35.14
+  Merton (priced by the blur)         0.020    0.090   PASS  (the 0.2% price noise alone)
+
+total time 142 s
+ALL PASS

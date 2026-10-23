@@ -4,7 +4,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node src/test.mjs && node src/test-barriers.mjs"
+    "test": "node src/test.mjs && node src/test-barriers.mjs && node src/test-fft.mjs && node src/test-kernels.mjs"
   },
   "devDependencies": {
     "vite": "^8.3.4"

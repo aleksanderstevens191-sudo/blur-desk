@@ -1,7 +1,12 @@
 // The demo page: draw a payoff, move expiry and volatility, and the GPU blurs
 // it into a price surface over (stock price, time to expiry). With a barrier
 // on, the surface comes from the hall of mirrors (or step-by-step monitoring).
-import { Payoff, priceCurve, priceBarrier, snapBarrier, S0, R } from "./pricer.js";
+// The blur kernel can be fat-tailed (Merton jumps, variance gamma); the smile
+// panel reads that kernel's GPU prices back as Black-Scholes implied vols.
+import { Payoff, priceCurve, priceCurveFat, priceBarrier, snapBarrier, S0, R } from "./pricer.js";
+import { mertonSeries, vgPrice, meanSd } from "./kernels.js";
+import { smile, ivAt } from "./smile.js";
+import SPY from "./spy_fit.json";
 import { bsCall, bsPut } from "./bs.js";
 import { barrierClosedForm, dkoClosedForm, vanillaBS, mirrorExponent } from "./barrier.js";
 import { gpuInfo } from "./gpu.js";
@@ -9,6 +14,7 @@ import { Camera, fit } from "./wire.js";
 import { drawScene, toMesh, maskToMesh, MESH_S } from "./scene.js";
 import {
   drawPad, padXY, drawKernel, drawCoil, drawExercise, drawError, drawBars, drawBarrierView, drawMethod, drawMirrors,
+  drawLogKernel, drawSmile,
 } from "./panels.js";
 
 const SLICES = 12; // surface slices between the payoff and today
@@ -25,7 +31,21 @@ const $ = (id) => document.getElementById(id);
 const state = {
   preset: "call", T: +$("T").value, sigma: +$("sigma").value, american: false,
   barrier: "off", io: "out", L: +$("L").value, U: +$("U").value, method: "weighted", shift: true, steps: 48,
+  model: "gaussian", // blur kernel: gaussian | merton | vg
+  spyFit: false, // Merton with the SPY calibration's exact parameters (until a slider moves)
+  jumps: { merton: { lam: 1, m: -0.1, delta: 0.1 }, vg: { freq: 5, theta: -0.2 } },
+  spy: false, // the smile panel shows the real SPY smile
+  expiry: 1, // which SPY expiry
 };
+const FIT = SPY.merton;
+
+// The kernel's parameters besides T and r. Variance gamma's nu is 1 / (jumps a year).
+function modelParams(st) {
+  if (st.model === "merton") return { sigma: st.sigma, ...st.jumps.merton };
+  if (st.model === "vg") return { sigma: st.sigma, theta: st.jumps.vg.theta, nu: 1 / st.jumps.vg.freq };
+  return { sigma: st.sigma };
+}
+const snapshot = () => ({ ...state, jumps: { merton: { ...state.jumps.merton }, vg: { ...state.jumps.vg } } });
 let payoff = new Payoff(PRESETS.call);
 let useGPU = true;
 
@@ -66,16 +86,24 @@ function payoffMesh(b) {
   view.payoffEx = Uint8Array.from(view.payoff, (p) => (p > 0 ? 1 : 0));
 }
 
-async function price(T) {
+async function price(T, snap) {
+  const run = (gpu) =>
+    snap.model === "gaussian"
+      ? priceCurve(payoff, { T, sigma: snap.sigma, american: snap.american, gpu })
+      : priceCurveFat(payoff, { T, model: snap.model, p: modelParams(snap), gpu });
   try {
-    return await priceCurve(payoff, { T, sigma: state.sigma, american: state.american, gpu: useGPU });
+    return await run(useGPU);
   } catch (e) {
     if (!useGPU) throw e;
-    useGPU = false; // device lost or unsupported: fall back to the CPU blur
-    $("cGpu").textContent = "CPU FALLBACK";
-    $("fGpu").textContent = `WEBGPU FAILED: ${e.message}`;
-    return priceCurve(payoff, { T, sigma: state.sigma, american: state.american, gpu: false });
+    gpuFailed(e); // device lost or unsupported: fall back to the CPU blur
+    return run(false);
   }
+}
+
+function gpuFailed(e) {
+  useGPU = false;
+  $("cGpu").textContent = "CPU FALLBACK";
+  $("fGpu").textContent = `WEBGPU FAILED: ${e.message}`;
 }
 
 async function reprice() {
@@ -85,7 +113,7 @@ async function reprice() {
   document.body.dataset.busy = "1"; // for scripted checks
   while (dirty) {
     dirty = false;
-    const snap = { ...state, bar: barrierSpec(state) };
+    const snap = { ...snapshot(), bar: barrierSpec(state) };
     payoffMesh(snap.bar);
     if (snap.bar) {
       await barrierPass(snap);
@@ -93,7 +121,7 @@ async function reprice() {
     }
     view.barrier = view.cf = view.method = view.mirrors = null;
     const t0 = performance.now();
-    const c = await price(snap.T);
+    const c = await price(snap.T, snap);
     const ms = performance.now() - t0;
     const result = { ...c, ...snap, ms };
     const err = maxError(result);
@@ -113,7 +141,7 @@ async function reprice() {
     }
 
     const taus = Array.from({ length: SLICES - 1 }, (_, j) => (snap.T * (j + 1)) / SLICES);
-    const curves = await Promise.all(taus.map(price));
+    const curves = await Promise.all(taus.map((tau) => price(tau, snap)));
     view.slices = curves.map((s, j) => ({ tau: taus[j], V: toMesh(s.S, s.V), ex: maskToMesh(s.S, s.exercise) }));
     boundary = exerciseBoundary();
   }
@@ -143,14 +171,22 @@ function maxError(r) {
     errs = null;
     return null;
   }
+  if (r.model !== "gaussian") {
+    // Merton's series; the variance gamma mixture integral is slower, so every few nodes
+    if (r.T <= 0) return curveError(r.S, r.V, (S) => f(S, S0, r.sigma, 0, R));
+    const p = { ...modelParams(r), T: r.T, r: R };
+    if (r.model === "merton") return curveError(r.S, r.V, (S) => mertonSeries(S, S0, r.preset, p));
+    return curveError(r.S, r.V, (S) => vgPrice(S, S0, r.preset, p), Math.ceil(r.S.length / 160));
+  }
   return curveError(r.S, r.V, (S) => f(S, S0, r.sigma, r.T, R));
 }
 
-// max |V - closed form| over the curve; also bins it onto the mesh for panel 05
-function curveError(S, V, f) {
+// max |V - closed form| over the curve (every stride-th node); also bins it
+// onto the mesh for panel 05
+function curveError(S, V, f, stride = 1) {
   errs = new Float64Array(MESH_S.length);
   let e = 0;
-  for (let i = 0; i < S.length; i++) {
+  for (let i = 0; i < S.length; i += stride) {
     const d = Math.abs(V[i] - f(S[i]));
     e = Math.max(e, d);
     const k = Math.min(MESH_S.length - 1, Math.max(0, Math.round(S[i] - MESH_S[0])));
@@ -270,7 +306,7 @@ function updateStats(r, e) {
     big.className = "big na";
   }
   $("fN").textContent = `${r.S.length.toLocaleString()} PRICES`;
-  if (!r.bar) $("cMode").textContent = r.american ? "AMERICAN" : "EUROPEAN";
+  if (!r.bar) $("cMode").textContent = modeName(r);
   $("fMs").innerHTML = `<b>${r.ms.toFixed(1)}</b> MS`;
   $("cGpu").textContent = `${useGPU ? "GPU" : "CPU"} ${r.ms.toFixed(1)} MS`;
   $("fEx2").textContent = r.american ? `${r.steps} DATES` : "";
@@ -280,28 +316,42 @@ function updateStats(r, e) {
 }
 
 // ---- input ----
-function readSliders() {
-  state.T = +$("T").value;
-  state.sigma = +$("sigma").value;
+function showSliders() {
   $("cT").textContent = $("fT").textContent = `${state.T.toFixed(2)} YR`;
-  $("cSigma").textContent = $("fSigma").textContent = `${Math.round(state.sigma * 100)}%`;
+  $("cSigma").textContent = $("fSigma").textContent = state.spyFit ? `${(state.sigma * 100).toFixed(2)}%` : `${Math.round(state.sigma * 100)}%`;
   $("fStd").textContent = (state.sigma * Math.sqrt(state.T)).toFixed(3);
   $("fSlices").textContent = state.T > 0 ? String(SLICES) : "0";
 }
-for (const id of ["T", "sigma"]) {
-  $(id).addEventListener("input", () => {
-    readSliders();
-    reprice();
-  });
+function readSliders() {
+  state.T = +$("T").value;
+  state.sigma = +$("sigma").value;
+  showSliders();
 }
+// a change to the kernel or the expiry: the surface and the smile both move
+function changed() {
+  reprice();
+  resmile();
+}
+$("T").addEventListener("input", () => {
+  state.T = +$("T").value;
+  showSliders();
+  changed();
+});
+$("sigma").addEventListener("input", () => {
+  state.sigma = +$("sigma").value;
+  leaveFit();
+  showSliders();
+  changed();
+});
 
 function setAmerican(on) {
   if (on && state.barrier !== "off") return; // barriers here are European
+  if (on && state.model !== "gaussian") setModel("gaussian"); // so are the fat-tailed kernels
   state.american = on;
   const b = $("american");
   b.setAttribute("aria-pressed", String(on));
   b.textContent = on ? "AMERICAN: ON" : "AMERICAN: OFF";
-  $("cMode").textContent = on ? "AMERICAN" : "EUROPEAN";
+  $("cMode").textContent = modeName(state);
   $("exTag").textContent = on ? "AMERICAN" : "EUROPEAN";
   $("fEx1").textContent = on ? "BLUR → DISCOUNT → CLIP" : "EXPIRY ONLY";
   $("legEx").hidden = !on;
@@ -319,15 +369,15 @@ function readBarrier() {
   $("fU").textContent = b && b.U ? b.U.S.toFixed(2) : "—";
 }
 function setBarrier(name) {
+  const on = name !== "off";
+  if (on && state.model !== "gaussian") setModel("gaussian"); // the mirrors need a Gaussian
   state.barrier = name;
   for (const el of document.querySelectorAll("[data-barrier]")) el.setAttribute("aria-pressed", String(el.dataset.barrier === name));
-  const on = name !== "off";
   if (on && state.american) setAmerican(false);
   $("american").disabled = on;
   $("L").disabled = !(name === "down" || name === "double");
   $("U").disabled = !(name === "up" || name === "double");
-  $("cErrLbl").textContent = on ? "MAX ERROR vs CLOSED FORM" : "MAX ERROR vs B-S";
-  $("errTitle").textContent = on ? "05 / ERROR vs CLOSED FORM" : "05 / ERROR vs B-S";
+  errLabels();
   $("legBar").hidden = !on;
   $("legBarText").textContent = state.io === "in" ? "BARRIER · KNOCKED IN" : "BARRIER · KNOCKED OUT";
   if (!on) {
@@ -335,7 +385,7 @@ function setBarrier(name) {
     $("fBar").textContent = "PICK A BARRIER";
     $("mirTag").textContent = "—";
     $("fMir1").textContent = $("fMir2").textContent = $("fMeth2").textContent = "";
-    $("cMode").textContent = state.american ? "AMERICAN" : "EUROPEAN";
+    $("cMode").textContent = modeName(state);
   }
   readBarrier();
 }
@@ -392,6 +442,233 @@ for (const b of document.querySelectorAll("[data-preset]")) {
   b.addEventListener("click", () => {
     setPreset(b.dataset.preset);
     reprice();
+  });
+}
+
+// ---- blur kernel: Gaussian, Merton, variance gamma, the SPY fit ----
+const KERNEL_NAME = { gaussian: "", merton: "MERTON", vg: "VAR. GAMMA" };
+const modeName = (st) => {
+  const k = st.spyFit ? "SPY FIT" : KERNEL_NAME[st.model];
+  return `${st.american ? "AMERICAN" : "EUROPEAN"}${k ? ` · ${k}` : ""}`;
+};
+const REF_NAME = { gaussian: ["B-S", "B-S"], merton: ["MERTON SERIES", "MERTON"], vg: ["VG INTEGRAL", "VG"] };
+function errLabels() {
+  const [long, short] = state.barrier !== "off" ? ["CLOSED FORM", "CLOSED FORM"] : REF_NAME[state.model];
+  $("cErrLbl").textContent = `MAX ERROR vs ${long}`;
+  $("errTitle").textContent = `05 / ERROR vs ${short}`;
+}
+const NOTE = {
+  gaussian: "BLACK-SCHOLES, PRICED BY A GAUSSIAN BLUR ON THE GPU (WEBGPU)",
+  merton: "MERTON JUMP-DIFFUSION, PRICED BY A BLUR WITH ITS FAT-TAILED KERNEL ON THE GPU (WEBGPU)",
+  vg: "VARIANCE GAMMA, PRICED BY A BLUR WITH ITS FAT-TAILED KERNEL ON THE GPU (WEBGPU)",
+};
+
+const pct = (v) => `${(v * 100).toFixed(1)}%`;
+const signed = (v) => `${v >= 0 ? "+" : "−"}${(Math.abs(v) * 100).toFixed(1)}%`;
+// Merton: jumps a year, mean jump in ln S, jump sd. Variance gamma: 1/nu is how
+// often its gamma clock jumps, theta the drift of the jumps; their spread comes
+// from the vol slider (panel 02), so it has no third slider.
+const JUMP_SLIDERS = {
+  merton: [
+    { key: "lam", label: "JUMPS/YR", min: 0, max: 3, step: 0.05, fmt: (v) => v.toFixed(2) },
+    { key: "m", label: "AVG JUMP", min: -0.3, max: 0.15, step: 0.005, fmt: signed },
+    { key: "delta", label: "JUMP VOL", min: 0.01, max: 0.3, step: 0.005, fmt: pct },
+  ],
+  vg: [
+    { key: "freq", label: "JUMPS/YR", min: 1, max: 40, step: 0.5, fmt: (v) => v.toFixed(1) },
+    { key: "theta", label: "AVG JUMP", min: -0.4, max: 0.15, step: 0.005, fmt: signed },
+    null,
+  ],
+};
+const JUMP_LABELS = ["JUMPS/YR", "AVG JUMP", "JUMP VOL"];
+
+function syncJumpSliders() {
+  const cfg = JUMP_SLIDERS[state.model];
+  for (let i = 0; i < 3; i++) {
+    const el = $(`j${i + 1}`);
+    const lab = $(`lj${i + 1}`);
+    const c = cfg && cfg[i];
+    el.disabled = !c;
+    if (!c) {
+      lab.innerHTML = state.model === "vg" ? `${JUMP_LABELS[i]} <b>= VOL</b>` : JUMP_LABELS[i];
+      continue;
+    }
+    const v = state.jumps[state.model][c.key];
+    Object.assign(el, { min: c.min, max: c.max, step: c.step });
+    el.value = v;
+    lab.innerHTML = `${c.label} <b>${c.fmt(v)}</b>`;
+  }
+}
+for (let i = 0; i < 3; i++) {
+  $(`j${i + 1}`).addEventListener("input", (e) => {
+    const c = JUMP_SLIDERS[state.model]?.[i];
+    if (!c) return;
+    state.jumps[state.model][c.key] = +e.target.value;
+    leaveFit();
+    syncJumpSliders();
+    changed();
+  });
+}
+
+// a slider moved away from the SPY calibration: plain Merton from here
+function leaveFit() {
+  if (!state.spyFit) return;
+  state.spyFit = false;
+  pick("model", state.model);
+  $("cMode").textContent = modeName(state);
+}
+
+function setModel(name) {
+  const fit = name === "spy";
+  const model = fit ? "merton" : name;
+  if (model !== "gaussian") {
+    if (state.american) setAmerican(false);
+    if (state.barrier !== "off") setBarrier("off");
+  }
+  state.model = model;
+  state.spyFit = fit;
+  if (fit) {
+    state.sigma = FIT.sigma;
+    $("sigma").value = FIT.sigma;
+    Object.assign(state.jumps.merton, { lam: FIT.lam, m: FIT.m, delta: FIT.delta });
+  }
+  pick("model", name);
+  syncJumpSliders();
+  showSliders();
+  errLabels();
+  $("cMode").textContent = modeName(state);
+  $("noteL").textContent = `STRIKE 100 · RATE 5% · ${NOTE[model]}`;
+  changed();
+}
+for (const el of document.querySelectorAll("[data-model]")) el.addEventListener("click", () => setModel(el.dataset.model));
+
+// ---- the smile (panel 08) and the kernel it was priced with (panel 07) ----
+let smileData = "STARTING";
+let smBusy = false;
+let smDirty = false;
+const fitSmiles = new Map(); // the calibrated Merton curve, per SPY expiry
+
+async function smileOn(model, p, opts) {
+  try {
+    return await smile(model, p, { ...opts, gpu: useGPU });
+  } catch (e) {
+    if (!useGPU) throw e;
+    gpuFailed(e);
+    return smile(model, p, { ...opts, gpu: false });
+  }
+}
+
+async function computeSmile(snap) {
+  const p = modelParams(snap);
+  if (snap.spy) {
+    // SPY in units where its spot (net of dividends) is 100: prices scale, vols don't
+    const sl = SPY.slices[snap.expiry];
+    const k = sl.K.map((K) => Math.log(K / sl.F));
+    const span = Math.max(...k) - Math.min(...k);
+    const kLo = Math.min(...k) - 0.25 * span;
+    const kHi = Math.max(...k) + 0.25 * span;
+    const kMax = Math.max(-kLo, kHi);
+    const live = await smileOn(snap.model, { ...p, T: sl.T, r: sl.r }, { kMax });
+    if (!fitSmiles.has(snap.expiry)) {
+      fitSmiles.set(snap.expiry, await smileOn("merton", { sigma: FIT.sigma, lam: FIT.lam, m: FIT.m, delta: FIT.delta, T: sl.T, r: sl.r }, { kMax }));
+    }
+    const fit = fitSmiles.get(snap.expiry);
+    const rms = (sm) => Math.sqrt(k.reduce((a, kk, i) => a + (ivAt(sm, kk) - sl.iv[i]) ** 2, 0) / k.length);
+    return {
+      mode: "spy", live, fit, kLo, kHi, F: sl.F, sl, model: snap.model, p: { ...p, T: sl.T, r: sl.r },
+      market: { k, iv: sl.iv, ivBid: sl.iv_bid, ivAsk: sl.iv_ask }, rmsLive: rms(live), rmsFit: rms(fit),
+    };
+  }
+  if (snap.T <= 0) return "T = 0 · NOTHING TO BLUR";
+  const pp = { ...p, T: snap.T, r: R };
+  const live = await smileOn(snap.model, pp, {});
+  return { mode: "live", live, atm: ivAt(live, 0), model: snap.model, p: pp };
+}
+
+async function resmile() {
+  smDirty = true;
+  if (smBusy) return;
+  smBusy = true;
+  while (smDirty) {
+    smDirty = false;
+    const snap = snapshot();
+    try {
+      smileData = await computeSmile(snap);
+    } catch (e) {
+      smileData = `SMILE FAILED: ${e.message.toUpperCase()}`;
+    }
+    smileStats(snap);
+    if (window.blurDesk) window.blurDesk.smile = smileData;
+  }
+  smBusy = false;
+}
+
+// P(X < mean - 3 sd) and the excess kurtosis, from the kernel weights
+function tailStats(d) {
+  const [mean, sd] = meanSd(d.model, d.p);
+  const { y, w } = d.live;
+  let tail = 0;
+  let m2 = 0;
+  let m4 = 0;
+  for (let j = 0; j < w.length; j++) {
+    const z = y[j] - mean;
+    if (z < -3 * sd) tail += w[j];
+    m2 += w[j] * z * z;
+    m4 += w[j] * z ** 4;
+  }
+  return { mean, sd, tail, kurt: m4 / (m2 * m2) - 3 };
+}
+
+function smileStats(snap) {
+  const d = smileData;
+  if (typeof d === "string") {
+    $("fSm1").textContent = d;
+    $("fSm2").textContent = "";
+    $("fFt1").textContent = d;
+    $("fFt2").textContent = "";
+    return;
+  }
+  const t = tailStats(d);
+  d.tail = t;
+  $("ftTag").textContent = `LOG SCALE · T ${d.p.T.toFixed(2)}`;
+  $("fFt1").innerHTML = `P(&lt; −3 SD) <b>${(t.tail * 100).toFixed(2)}%</b> · GAUSS 0.13%`;
+  $("fFt2").innerHTML = `EXCESS KURTOSIS <b>${Math.abs(t.kurt) < 0.05 ? "0.0" : `${t.kurt > 0 ? "+" : "−"}${Math.abs(t.kurt).toFixed(1)}`}</b>`;
+  const s = d.live;
+  const gpu = `${useGPU ? "GPU" : "CPU"}: 2 ROWS → ${s.k.length} STRIKES · ${s.ms.toFixed(0)} MS`;
+  if (d.mode === "spy") {
+    $("smTag").textContent = `REAL SPY · ${d.sl.expiry} · BID–ASK`;
+    $("fSm1").innerHTML = `SPY ${SPY.asof} · ${d.sl.K.length} QUOTES · ${gpu}`;
+    $("fSm2").innerHTML = `RMS vs MID: FIT <b>${(d.rmsFit * 100).toFixed(2)}</b> · LIVE <b>${(d.rmsLive * 100).toFixed(2)}</b> VOL PTS`;
+  } else {
+    const lo = ivAt(s, -t.sd);
+    const hi = ivAt(s, t.sd);
+    const wing = (v) => {
+      if (!Number.isFinite(v)) return "—";
+      const x = Math.round((v - d.atm) * 1e4) / 100;
+      return x === 0 ? "0.00" : `${x > 0 ? "+" : "−"}${Math.abs(x).toFixed(2)}`;
+    };
+    $("smTag").textContent = "IMPLIED VOL vs STRIKE · LIVE";
+    $("fSm1").innerHTML = `ATM <b>${(d.atm * 100).toFixed(2)}%</b> · −1 SD <b>${wing(lo)}</b> · +1 SD <b>${wing(hi)}</b> VOL PTS`;
+    $("fSm2").textContent = gpu;
+  }
+}
+
+function setSpy(on) {
+  state.spy = on;
+  const b = $("spy");
+  b.setAttribute("aria-pressed", String(on));
+  b.textContent = on ? "REAL SPY SMILE: ON" : "REAL SPY SMILE: OFF";
+  for (const el of document.querySelectorAll("[data-expiry]")) el.disabled = !on;
+}
+$("spy").addEventListener("click", () => {
+  setSpy(!state.spy);
+  resmile();
+});
+for (const el of document.querySelectorAll("[data-expiry]")) {
+  el.addEventListener("click", () => {
+    state.expiry = +el.dataset.expiry;
+    pick("expiry", state.expiry);
+    resmile();
   });
 }
 
@@ -454,7 +731,7 @@ scene.addEventListener("pointercancel", () => (drag = null));
 
 // ---- render loop ----
 const ctxs = {};
-for (const id of ["scene", "pad", "kernel", "coil", "exercise", "error", "bars", "barrier", "method", "mirrors"]) ctxs[id] = $(id).getContext("2d");
+for (const id of ["scene", "pad", "kernel", "coil", "exercise", "error", "bars", "barrier", "method", "mirrors", "logk", "smile"]) ctxs[id] = $(id).getContext("2d");
 
 function frame(ms) {
   const t = ms / 1000;
@@ -507,6 +784,15 @@ function frame(ms) {
     drawMethod(ctxs.method, W, H, view.barrier && (view.method || "T = 0 · NOTHING TO BLUR"));
   }
   {
+    const [W, H] = fit($("logk"), ctxs.logk);
+    const d = smileData;
+    drawLogKernel(ctxs.logk, W, H, typeof d === "string" ? d : d.tail && { y: d.live.y, w: d.live.w, dx: d.live.dx, mean: d.tail.mean, sd: d.tail.sd });
+  }
+  {
+    const [W, H] = fit($("smile"), ctxs.smile);
+    drawSmile(ctxs.smile, W, H, smileData);
+  }
+  {
     const [W, H] = fit($("mirrors"), ctxs.mirrors);
     drawMirrors(ctxs.mirrors, W, H, t, view.barrier && (view.mirrors || "T = 0 · NOTHING TO BLUR"));
   }
@@ -517,6 +803,8 @@ async function start() {
   readSliders();
   setPreset("call");
   setBarrier("off");
+  syncJumpSliders();
+  setSpy(false);
   try {
     const name = await gpuInfo();
     $("fGpu").textContent = name.toUpperCase();
@@ -526,7 +814,7 @@ async function start() {
     $("fGpu").textContent = e.message.toUpperCase();
   }
   requestAnimationFrame(frame);
-  reprice();
+  changed();
 }
 
 start();

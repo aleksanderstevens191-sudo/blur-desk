@@ -1,0 +1,22 @@
+spy_chain_2026-10-22.csv: 54 quotes as of 2026-10-22, 2 expiries, 20 out-of-the-money mids
+
+  refit vs src/spy_fit.json     refit       committed
+  Merton sigma                   0.09574     0.09574
+  Merton lam                     1.67063     1.67063
+  Merton m                      -0.09457    -0.09457
+  Merton delta                   0.04978     0.04978
+  flat sigma                     0.14575     0.14575
+  largest relative difference 0.0e+00   PASS
+
+  fit error, implied vol points   RMS     max
+  flat Black-Scholes             1.72    3.58
+  Merton (priced by the blur)    0.30    0.53
+  Merton RMS is 5.7 times smaller   PASS
+  Merton within 1 vol point of every quote   PASS
+
+  2026-11-20: vol at 740 minus vol at 795: market +6.00, Merton +6.32 vol pts   PASS
+  2026-12-18: vol at 740 minus vol at 795: market +5.01, Merton +4.21 vol pts   PASS
+  fitted mean log jump m = -9.46%   PASS
+
+total time 18 s
+ALL PASS

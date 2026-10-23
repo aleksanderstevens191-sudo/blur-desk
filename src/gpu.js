@@ -56,7 +56,7 @@ const WORKGROUP = 64;
 let ctxPromise;
 
 // One device and pipeline, created on first use.
-function context() {
+export function context() {
   ctxPromise ??= (async () => {
     if (!("gpu" in navigator)) throw new Error("WebGPU is not available in this browser");
     const adapter = await navigator.gpu.requestAdapter();
@@ -82,7 +82,7 @@ export async function gpuInfo() {
   return [info.vendor, info.architecture, info.description].filter(Boolean).join(" ") || "unknown adapter";
 }
 
-function storage(device, data, extra = 0) {
+export function storage(device, data, extra = 0) {
   const buf = device.createBuffer({
     size: Math.max(16, data.byteLength),
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | extra,
@@ -103,7 +103,7 @@ function checkSizes(n, kLen) {
   if ((kLen - 1) / 2 >= n) throw new Error("kernel wider than grid; widen the grid");
 }
 
-async function readback(device, encoder, src, n) {
+export async function readback(device, encoder, src, n) {
   const read = device.createBuffer({ size: n * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
   encoder.copyBufferToBuffer(src, 0, read, 0, n * 4);
   device.queue.submit([encoder.finish()]);
@@ -397,13 +397,13 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) 
 }
 `;
 
-function groups(threads) {
+export function groups(threads) {
   const wg = Math.ceil(threads / WORKGROUP);
   const x = Math.min(wg, 65535);
   return [x, Math.ceil(wg / x)];
 }
 
-function uniform(device, words) {
+export function uniform(device, words) {
   const buf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   device.queue.writeBuffer(buf, 0, words);
   return buf;

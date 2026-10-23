@@ -1,0 +1,164 @@
+Stage 4: the fat-tailed kernels in JavaScript and on the GPU, and the live smile
+Python fixtures -> JS port (64-bit, node) -> WebGPU (32-bit, /check.html). Correctness runs in this
+container use Chromium's software WebGPU adapter (SwiftShader, no real GPU).
+
+==== python reference/make_kernel_fixtures.py ====
+Gaussian, the demo's default: 5329 nodes, dx 0.0015, 14 strikes, 21 smile points
+Merton, the demo's default jumps: 11641 nodes, dx 0.0015, 14 strikes, 21 smile points
+Merton, SPY fit, 2026-11-20: 44953 nodes, dx 0.000135, 10 strikes, 21 smile points
+Merton, SPY fit, 2026-12-18: 38259 nodes, dx 0.000189, 10 strikes, 21 smile points
+Merton, crash-heavy: 2 jumps/yr of -20%, T = 2: 31399 nodes, dx 0.00141, 14 strikes, 21 smile points
+Variance gamma, theta -0.2, T = 0.5: 9697 nodes, dx 0.000711, 14 strikes, 21 smile points
+Variance gamma, 4 weeks, T/nu = 0.25: 27483 nodes, dx 0.000284, 14 strikes, 21 smile points
+wrote src/kernel_fixtures.json
+
+==== node src/test-kernels.mjs: src/kernels.js (64-bit) vs Python ====
+special functions vs scipy (relative, or absolute below 1)
+PASS gammaln, gammainc, gammaincc, gammainccinv: max 1.2e-14
+
+Gaussian, the demo's default: 5329 nodes, dx 0.00150
+PASS grid: JS half-width 2664 nodes, Python 2664 (JS keeps every Poisson term Python keeps, may keep more)
+PASS kernel (7 ms): sum w 1.9e-15, sum w e^y 2.0e-15 off Python; weights at 8 nodes within 2.1e-10 of the largest
+PASS 14 strikes: |JS blur - Python blur| 1.5e-13, JS vs Python Black-Scholes 2.8e-14 (blur vs that formula: 1.7e-10)
+PASS smile from one row: 21 strikes, |price - Python| 2.7e-14, |implied vol - Python| 4.3e-15
+PASS demo grid: 3097 nodes, dx 0.00200, |price - Python| 3.5e-10
+
+Merton, the demo's default jumps: 11641 nodes, dx 0.00150
+PASS grid: JS half-width 5976 nodes, Python 5820 (JS keeps every Poisson term Python keeps, may keep more)
+PASS kernel (11 ms): sum w -1.4e-15, sum w e^y -2.2e-16 off Python; weights at 8 nodes within 1.0e-10 of the largest
+PASS 14 strikes: |JS blur - Python blur| 6.4e-14, JS vs Python Merton series 1.1e-14 (blur vs that formula: 1.4e-10)
+PASS smile from one row: 21 strikes, |price - Python| 3.9e-14, |implied vol - Python| 2.0e-14
+PASS demo grid: 6965 nodes, dx 0.00200, |price - Python| 2.7e-10
+
+Merton, SPY fit, 2026-11-20: 44953 nodes, dx 0.000135
+PASS grid: JS half-width 23925 nodes, Python 22476 (JS keeps every Poisson term Python keeps, may keep more)
+PASS kernel (22 ms): sum w -2.9e-14, sum w e^y -2.9e-14 off Python; weights at 8 nodes within 4.7e-10 of the largest
+PASS 10 strikes: |JS blur - Python blur| 9.5e-14, JS vs Python Merton series 5.8e-15 (blur vs that formula: 1.3e-11)
+PASS smile from one row: 21 strikes, |price - Python| 9.7e-14, |implied vol - Python| 1.7e-12
+PASS demo grid: 7049 nodes, dx 0.000675, |price - Python| 8.4e-9
+
+Merton, SPY fit, 2026-12-18: 38259 nodes, dx 0.000189
+PASS grid: JS half-width 19129 nodes, Python 19129 (JS keeps every Poisson term Python keeps, may keep more)
+PASS kernel (23 ms): sum w 1.4e-14, sum w e^y 1.0e-14 off Python; weights at 8 nodes within 5.5e-10 of the largest
+PASS 10 strikes: |JS blur - Python blur| 4.1e-14, JS vs Python Merton series 2.1e-14 (blur vs that formula: 1.6e-11)
+PASS smile from one row: 21 strikes, |price - Python| 3.5e-14, |implied vol - Python| 8.8e-13
+PASS demo grid: 5783 nodes, dx 0.000946, |price - Python| 1.0e-8
+
+Merton, crash-heavy: 2 jumps/yr of -20%, T = 2: 31399 nodes, dx 0.00141
+PASS grid: JS half-width 15699 nodes, Python 15699 (JS keeps every Poisson term Python keeps, may keep more)
+PASS kernel (45 ms): sum w 2.4e-15, sum w e^y 1.1e-15 off Python; weights at 8 nodes within 1.7e-10 of the largest
+PASS 14 strikes: |JS blur - Python blur| 1.6e-13, JS vs Python Merton series 5.6e-13 (blur vs that formula: 1.5e-11)
+PASS smile from one row: 21 strikes, |price - Python| 6.8e-14, |implied vol - Python| 1.0e-13
+PASS demo grid: 12001 nodes, dx 0.00200, |price - Python| 5.8e-11
+
+Variance gamma, theta -0.2, T = 0.5: 9697 nodes, dx 0.000711
+PASS grid: JS half-width 4848 nodes, Python 4848 (JS keeps every Poisson term Python keeps, may keep more)
+PASS kernel (81 ms): sum w 5.6e-15, sum w e^y 5.3e-15 off Python; weights at 8 nodes within 1.0e-9 of the largest
+PASS 14 strikes: |JS blur - Python blur| 2.7e-13, JS vs Python VG mixture 4.3e-14 (blur vs that formula: 1.2e-10)
+PASS smile from one row: 21 strikes, |price - Python| 1.2e-13, |implied vol - Python| 1.2e-13
+PASS demo grid: 2891 nodes, dx 0.00200, |price - Python| 8.2e-9
+
+Variance gamma, 4 weeks, T/nu = 0.25: 27483 nodes, dx 0.000284
+PASS grid: JS half-width 13741 nodes, Python 13741 (JS keeps every Poisson term Python keeps, may keep more)
+PASS kernel (216 ms): sum w 1.9e-14, sum w e^y 3.1e-14 off Python; weights at 8 nodes within 3.2e-11 of the largest
+PASS 14 strikes: |JS blur - Python blur| 1.1e-12, JS vs Python VG mixture 2.0e-14 (blur vs that formula: 3.1e-11)
+PASS smile from one row: 21 strikes, |price - Python| 4.3e-13, |implied vol - Python| 4.3e-14
+PASS demo grid: 4585 nodes, dx 0.00142, |price - Python| 3.2e-8
+
+the demo's curves, 64-bit: priceCurveFat vs the formulas, S from 40 to 160
+PASS merton  T=1    {"sigma":0.3,"lam":1,"m":-0.1,"delta":0.1}: max |curve - formula| 3.4e-13
+PASS merton  T=0.01 {"sigma":0.05,"lam":3,"m":-0.3,"delta":0.3}: max |curve - formula| 1.2e-12
+PASS vg      T=0.5  {"sigma":0.3,"theta":-0.2,"nu":0.2}: max |curve - formula| 9.6e-13
+PASS vg      T=0.02 {"sigma":0.2,"theta":-0.3,"nu":0.5}: max |curve - formula| 4.7e-13
+
+all kernel checks pass
+
+==== /check.html, fat-tailed kernel section, GPU: google swiftshader ====
+fat-tailed kernels (Gaussian, Merton, variance gamma) vs Python (reference/make_kernel_fixtures.py):
+Each case on Python's grid (y_j = j dx, j = -J..J), kernel built in JS (64-bit), blurred on the GPU
+(32-bit; the FFT for kernels over 256 taps). S0 = 100. Pass: |gpu - py| < 1e-4 on every price.
+
+Gaussian, the demo's default: 5329 taps, dx 0.00150
+PASS 14 strikes, 70 85 95 100 105 115 140: |gpu - py| 1.03e-5   (|gpu - Black-Scholes| 1.03e-5; kernel 6 ms, blur 44 ms)
+PASS smile, one call row + one put row, 1001 strikes (k = -0.750 to 0.750): at the 21 fixture strikes |gpu - py| 3.33e-5, implied vol within 0.0008 vol pts (22 ms)
+PASS smile rows blurred directly instead: |gpu - py| 1.06e-6 (827 ms)
+
+Merton, the demo's default jumps: 11641 taps, dx 0.00150
+PASS 14 strikes, 70 85 95 100 105 115 140: |gpu - py| 2.13e-5   (|gpu - Merton series| 2.13e-5; kernel 11 ms, blur 60 ms)
+PASS smile, one call row + one put row, 1107 strikes (k = -0.830 to 0.830): at the 21 fixture strikes |gpu - py| 2.17e-5, implied vol within 0.0006 vol pts (25 ms)
+PASS smile rows blurred directly instead: |gpu - py| 4.56e-7 (3569 ms)
+
+Merton, SPY fit, 2026-11-20: 44953 taps, dx 0.000135
+PASS 10 strikes, 97 98 99 100 101 102 103 104: |gpu - py| 1.66e-5   (|gpu - Merton series| 1.66e-5; kernel 44 ms, blur 213 ms)
+PASS smile, one call row + one put row, 1757 strikes (k = -0.118 to 0.118): at the 21 fixture strikes |gpu - py| 1.68e-5, implied vol within 0.0064 vol pts (2 far out of the money, vega < 0.05, not inverted) (98 ms)
+PASS smile rows blurred directly instead: |gpu - py| 7.33e-8 (37577 ms)
+
+Merton, SPY fit, 2026-12-18: 38259 taps, dx 0.000189
+PASS 10 strikes, 97 98 100 101 102 103 104: |gpu - py| 1.96e-5   (|gpu - Merton series| 1.96e-5; kernel 37 ms, blur 138 ms)
+PASS smile, one call row + one put row, 1757 strikes (k = -0.166 to 0.166): at the 21 fixture strikes |gpu - py| 2.05e-5, implied vol within 0.0370 vol pts (1 far out of the money, vega < 0.05, not inverted) (71 ms)
+PASS smile rows blurred directly instead: |gpu - py| 2.77e-7 (23281 ms)
+
+Merton, crash-heavy: 2 jumps/yr of -20%, T = 2: 31399 taps, dx 0.00141
+PASS 14 strikes, 70 85 95 100 105 115 140: |gpu - py| 2.44e-5   (|gpu - Merton series| 2.44e-5; kernel 62 ms, blur 114 ms)
+PASS smile, one call row + one put row, 2239 strikes (k = -1.583 to 1.583): at the 21 fixture strikes |gpu - py| 6.30e-5, implied vol within 0.0127 vol pts (51 ms)
+PASS smile rows blurred directly instead: |gpu - py| 1.36e-6 (17696 ms)
+
+Variance gamma, theta -0.2, T = 0.5: 9697 taps, dx 0.000711
+PASS 14 strikes, 70 85 95 100 105 115 140: |gpu - py| 2.35e-5   (|gpu - VG mixture| 2.35e-5; kernel 84 ms, blur 52 ms)
+PASS smile, one call row + one put row, 1003 strikes (k = -0.356 to 0.356): at the 21 fixture strikes |gpu - py| 1.71e-5, implied vol within 0.0011 vol pts (21 ms)
+PASS smile rows blurred directly instead: |gpu - py| 2.93e-7 (1743 ms)
+
+Variance gamma, 4 weeks, T/nu = 0.25: 27483 taps, dx 0.000284
+PASS 14 strikes, 70 85 95 100 105 115 140: |gpu - py| 3.31e-5   (|gpu - VG mixture| 3.31e-5; kernel 214 ms, blur 100 ms)
+PASS smile, one call row + one put row, 1001 strikes (k = -0.142 to 0.142): at the 21 fixture strikes |gpu - py| 2.61e-5, implied vol within 0.0015 vol pts (40 ms)
+PASS smile rows blurred directly instead: |gpu - py| 1.33e-7 (13264 ms)
+
+all GPU results within 1e-4 of the Python reference, FFT within 1e-4 of direct
+
+(the full /check.html run: every section PASS, 61 checks, 0 FAIL)
+
+==== /check.html?only=kernels on Alek's Mac (Apple GPU, Chrome), 2026-10-23 ====
+GPU: apple metal-3
+tolerance: |gpu - py| < 0.0001
+
+
+fat-tailed kernels (Gaussian, Merton, variance gamma) vs Python (reference/make_kernel_fixtures.py):
+Each case on Python's grid (y_j = j dx, j = -J..J), kernel built in JS (64-bit), blurred on the GPU
+(32-bit; the FFT for kernels over 256 taps). S0 = 100. Pass: |gpu - py| < 1e-4 on every price.
+
+Gaussian, the demo's default: 5329 taps, dx 0.00150
+PASS 14 strikes, 70 85 95 100 105 115 140: |gpu - py| 1.30e-5   (|gpu - Black-Scholes| 1.30e-5; kernel 5 ms, blur 10 ms)
+PASS smile, one call row + one put row, 1001 strikes (k = -0.750 to 0.750): at the 21 fixture strikes |gpu - py| 2.07e-5, implied vol within 0.0005 vol pts (9 ms)
+PASS smile rows blurred directly instead: |gpu - py| 4.37e-7 (6 ms)
+
+Merton, the demo's default jumps: 11641 taps, dx 0.00150
+PASS 14 strikes, 70 85 95 100 105 115 140: |gpu - py| 1.32e-5   (|gpu - Merton series| 1.32e-5; kernel 6 ms, blur 6 ms)
+PASS smile, one call row + one put row, 1107 strikes (k = -0.830 to 0.830): at the 21 fixture strikes |gpu - py| 1.42e-5, implied vol within 0.0007 vol pts (6 ms)
+PASS smile rows blurred directly instead: |gpu - py| 4.56e-7 (19 ms)
+
+Merton, SPY fit, 2026-11-20: 44953 taps, dx 0.000135
+PASS 10 strikes, 97 98 99 100 101 102 103 104: |gpu - py| 1.73e-5   (|gpu - Merton series| 1.73e-5; kernel 10 ms, blur 11 ms)
+PASS smile, one call row + one put row, 1757 strikes (k = -0.118 to 0.118): at the 21 fixture strikes |gpu - py| 1.33e-5, implied vol within 0.0038 vol pts (2 far out of the money, vega < 0.05, not inverted) (16 ms)
+PASS smile rows blurred directly instead: |gpu - py| 5.18e-8 (55 ms)
+
+Merton, SPY fit, 2026-12-18: 38259 taps, dx 0.000189
+PASS 10 strikes, 97 98 100 101 102 103 104: |gpu - py| 1.64e-5   (|gpu - Merton series| 1.64e-5; kernel 10 ms, blur 11 ms)
+PASS smile, one call row + one put row, 1757 strikes (k = -0.166 to 0.166): at the 21 fixture strikes |gpu - py| 9.26e-6, implied vol within 0.0016 vol pts (1 far out of the money, vega < 0.05, not inverted) (14 ms)
+PASS smile rows blurred directly instead: |gpu - py| 2.41e-7 (34 ms)
+
+Merton, crash-heavy: 2 jumps/yr of -20%, T = 2: 31399 taps, dx 0.00141
+PASS 14 strikes, 70 85 95 100 105 115 140: |gpu - py| 2.87e-5   (|gpu - Merton series| 2.87e-5; kernel 17 ms, blur 8 ms)
+PASS smile, one call row + one put row, 2239 strikes (k = -1.583 to 1.583): at the 21 fixture strikes |gpu - py| 3.70e-5, implied vol within 0.0026 vol pts (11 ms)
+PASS smile rows blurred directly instead: |gpu - py| 2.37e-6 (24 ms)
+
+Variance gamma, theta -0.2, T = 0.5: 9697 taps, dx 0.000711
+PASS 14 strikes, 70 85 95 100 105 115 140: |gpu - py| 2.40e-5   (|gpu - VG mixture| 2.40e-5; kernel 40 ms, blur 4 ms)
+PASS smile, one call row + one put row, 1003 strikes (k = -0.356 to 0.356): at the 21 fixture strikes |gpu - py| 2.25e-5, implied vol within 0.0020 vol pts (5 ms)
+PASS smile rows blurred directly instead: |gpu - py| 4.36e-7 (10 ms)
+
+Variance gamma, 4 weeks, T/nu = 0.25: 27483 taps, dx 0.000284
+PASS 14 strikes, 70 85 95 100 105 115 140: |gpu - py| 3.98e-5   (|gpu - VG mixture| 3.98e-5; kernel 115 ms, blur 8 ms)
+PASS smile, one call row + one put row, 1001 strikes (k = -0.142 to 0.142): at the 21 fixture strikes |gpu - py| 1.91e-5, implied vol within 0.0009 vol pts (14 ms)
+PASS smile rows blurred directly instead: |gpu - py| 1.33e-7 (30 ms)
+
+all GPU results within 1e-4 of the Python reference

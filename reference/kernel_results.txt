@@ -1,0 +1,103 @@
+80 random cases per model. All: S0 in [60,140], K/S0 in [0.7,1.4], r in [-1%,10%], T from 1 week to 3 years (whole days / 365).
+  gaussian  sigma in [8%,50%]
+            kernel length 5235 to 11307 nodes
+  merton    sigma in [8%,50%], jumps/yr lam in [0.05,3], mean jump m in [-30%,15%], jump vol delta in [2%,40%]
+            kernel length 5829 to 122465 nodes
+  vg        sigma in [8%,40%], theta in [-0.40,0.10], nu in [0.05,0.5] (T/nu down to 0.04)
+            kernel length 5277 to 56845 nodes
+  kernels and blurs built in 40.7 s
+
+========================================================================
+1) Every kernel is a risk-neutral density
+========================================================================
+  On the grid: sum_j w_j = 1 and sum_j w_j e^{y_j} = e^{rT} (the forward / S0)
+  model        max |sum w - 1|   max |sum w e^y - e^rT| / e^rT   check < 1e-10
+  gaussian          1.6e-14           1.6e-14                    PASS
+  merton            7.3e-15           7.8e-15                    PASS
+  vg                2.1e-13           2.1e-13                    PASS
+
+  Off the grid: the closed-form densities integrated with scipy quad
+  model      T      int p - 1     int p e^y / e^rT - 1   check < 1e-10
+  gaussian  2.082       0.0e+00        0.0e+00             PASS
+  gaussian  0.507       0.0e+00        0.0e+00             PASS
+  gaussian  2.197       0.0e+00        4.4e-16             PASS
+  merton    2.077      -2.2e-16       -5.6e-16             PASS
+  merton    2.230      -2.2e-16        0.0e+00             PASS
+  merton    0.732       0.0e+00        2.2e-16             PASS
+  vg        2.299       6.7e-16        8.9e-16             PASS
+  vg        1.227      -3.3e-16       -4.1e-15             PASS
+  vg        1.581       1.4e-14        1.4e-14             PASS
+
+========================================================================
+2) Put-call parity: C - P = S0 - K e^{-rT}
+========================================================================
+  gaussian  max gap over 80 cases = 4.9e-13   PASS
+  merton    max gap over 80 cases = 5.2e-13   PASS
+  vg        max gap over 80 cases = 6.9e-12   PASS
+
+========================================================================
+3) Gaussian kernel vs the Black-Scholes formula
+========================================================================
+  max |blur - BS| over 80 cases x call/put = 2.8e-10   PASS
+
+========================================================================
+4) Merton blur vs Merton's 1976 series
+========================================================================
+  series: sum over n jumps of Poisson(lam (1+kappa) T) weights x Black-Scholes
+          with sigma_n^2 = sigma^2 + n delta^2/T, r_n = r - lam kappa + n ln(1+kappa)/T
+  max |blur - series| over 80 cases x call/put = 1.8e-10   PASS
+  worst: ('call', 0.9, 636, 0.299, {'lam': 0.125, 'm': 0.016, 'delta': 0.045}, 36.242652)
+
+========================================================================
+5) Merton blur vs QuantLib
+========================================================================
+  QuantLib 1.44. Its Merton76Process engine (JumpDiffusionEngine) is not in
+  the Python bindings, so Merton is priced with QuantLib's Bates engine (Heston + Merton
+  jumps, semi-analytic Fourier integral) with the variance pinned: v0 = theta = sigma^2,
+  vol of vol 1e-5. QuantLib's jump convention ln(1+J) ~ N(nu, delta^2) is Merton's.
+  max |blur - QuantLib| over 80 cases x call/put = 1.2e-09   PASS
+  worst: ('call', 1.011, 407, 7.289413)
+
+========================================================================
+6) Variance gamma blur vs QuantLib
+========================================================================
+  QuantLib VarianceGammaEngine (Madan-Carr-Chang closed form, integrated numerically).
+  QuantLib's engine is itself unreliable when T/nu is small (the density is singular at
+  its centre): its own call and put break put-call parity there. A QuantLib price only
+  counts as a reference when QuantLib's call and put satisfy parity to 1e-8.
+  52 of 80 cases where QuantLib holds parity (calls and puts):
+    max |blur - QuantLib| = 9.0e-09   PASS
+    worst (cp, K/S0, days, T/nu, QuantLib price): ('call', 1.226, 564, 3.476, 2.356409)
+  28 cases where QuantLib breaks parity by more than 1e-8; the 13 by more than 1e-6
+  have T/nu from 0.07 to 1.04. The largest:
+    days   T/nu   QuantLib C-P gap   leg off   blur - QuantLib on that leg
+      10  0.066         -3.9e+00     call          3.9e+00
+      18  0.311          9.7e-01     put           9.7e-01
+      35  0.192          8.7e-01     put           8.7e-01
+      27  0.294         -5.3e-01     call          5.3e-01
+      67  0.382         -9.1e-02     call          9.1e-02
+      30  0.467         -3.8e-02     call          3.8e-02
+  On every one of these the blur still holds parity (section 2) and matches the
+  separate adaptive integration in section 7, so the gap is QuantLib's.
+
+========================================================================
+7) Variance gamma blur vs the gamma-mixture formula (adaptive quad, no grid)
+========================================================================
+  max |blur - mixture| over 80 cases x call/put = 7.4e-10   PASS
+  worst (cp, K/S0, days, T/nu, price): ('call', 1.119, 144, 0.933, 1.939043)
+
+========================================================================
+8) Every model vs a Carr-Madan FFT pricer (characteristic function only)
+========================================================================
+  2^18 points, frequency step 0.02, damping alpha = +1.5 (calls), -1.5 (puts),
+  log-strike grid centred on ln K. The FFT needs the characteristic function to
+  decay; for variance gamma it decays only like |u|^(-2T/nu), so short-dated VG
+  is reported separately and not checked at 1e-6.
+  model      maturities      cases   max |blur - FFT|   check < 1e-6
+  gaussian   all              80        2.8e-10      PASS
+  merton     all              80        1.8e-10      PASS
+  vg         T/nu >= 1        67        7.3e-10      PASS
+  vg         T/nu < 1         13        4.1e-06      (reported)
+
+total time 78 s
+ALL PASS

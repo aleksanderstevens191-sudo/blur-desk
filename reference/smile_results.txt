@@ -1,0 +1,120 @@
+S0 = 100.0, r = 4%. Moneyness k = ln(K/F), F = S0 e^(rT). Each strike priced with
+its out-of-the-money option and inverted to a Black-Scholes vol (Brent, to 1e-15).
+  Merton, m = 0      diffusion vol 15%, lam 1, m 0, delta 0.15
+  Merton, m = -10%   diffusion vol 15%, lam 1, m -0.1, delta 0.15
+  VG, theta = 0      diffusion vol 18%, theta 0, nu 0.2
+  VG, theta = -0.2   diffusion vol 18%, theta -0.2, nu 0.2
+
+============================================================================
+1) The inversion and the Gaussian kernel: no smile where there should be none
+============================================================================
+  BS price -> implied vol round trip, 10 maturities x 21 strikes x 3 vols:
+    max |implied - true| = 5.9e-15   PASS
+  Gaussian kernel at 20% vol, 10 maturities x 13 strikes out to 3 sd:
+    max |implied - 20%| = 2.4e-11   PASS
+
+============================================================================
+2) Implied vols from the blur vs from the independent prices (Stage 1 references)
+============================================================================
+  4 models x 3 maturities (2w, 3m, 2y) x 11 strikes out to 2.5 sd; the references are
+  Merton's series and the variance-gamma mixture integral
+    max |vol from blur - vol from reference| = 5.5e-04 vol bp   PASS  (< 0.01 bp)
+
+============================================================================
+3) The smile, measured: level, skew and curvature at the money, by maturity
+============================================================================
+  skew = dIV/dk, curvature = d2IV/dk2 at k = 0 (5-point differences, step 0.1 sd).
+  wings = IV at k = -1 sd and +1 sd of the kernel, minus ATM, in vol points.
+
+  Merton, m = 0
+    T      ATM vol    skew      curvature    -1 sd wing  +1 sd wing
+    7d      16.81%   +0.0639     +31.7704      +1.51       +2.02
+    14d     17.42%   +0.0588     +18.7650      +1.65       +2.27
+    30d     18.22%   +0.0506      +9.4619      +1.64       +2.35
+    2m      19.01%   +0.0408      +4.5331      +1.42       +2.16
+    3m      19.47%   +0.0342      +2.7407      +1.20       +1.93
+    6m      20.15%   +0.0227      +0.9955      +0.76       +1.40
+    1y      20.64%   +0.0130      +0.2966      +0.37       +0.89
+    2y      20.94%   +0.0068      +0.0767      +0.14       +0.52
+    3y      21.05%   +0.0045      +0.0338      +0.06       +0.38
+    5y      21.13%   +0.0027      +0.0120      +0.01       +0.26
+
+  Merton, m = -10%
+    T      ATM vol    skew      curvature    -1 sd wing  +1 sd wing
+    7d      17.09%   -0.4833     +35.9163      +4.50       +0.15
+    14d     17.82%   -0.4460     +21.2619      +5.12       -0.06
+    30d     18.84%   -0.3852     +10.6627      +5.47       -0.45
+    2m      19.88%   -0.3109      +4.9682      +5.22       -0.92
+    3m      20.49%   -0.2600      +2.8867      +4.79       -1.18
+    6m      21.41%   -0.1696      +0.9049      +3.66       -1.50
+    1y      22.04%   -0.0941      +0.2034      +2.52       -1.50
+    2y      22.38%   -0.0472      +0.0396      +1.69       -1.26
+    3y      22.49%   -0.0312      +0.0161      +1.35       -1.08
+    5y      22.58%   -0.0185      +0.0055      +1.03       -0.87
+
+  VG, theta = 0
+    T      ATM vol    skew      curvature    -1 sd wing  +1 sd wing
+    7d       8.87%   +0.7602   +3375.0733      +8.60       +9.12
+    14d     11.31%   +0.5041    +968.8602      +6.56       +7.12
+    30d     13.88%   +0.2383    +165.0001      +4.14       +4.70
+    2m      15.63%   +0.0936     +25.3981      +2.35       +2.87
+    3m      16.35%   +0.0523      +8.4530      +1.58       +2.07
+    6m      17.15%   +0.0214      +1.5142      +0.74       +1.14
+    1y      17.58%   +0.0097      +0.3214      +0.31       +0.62
+    2y      17.80%   +0.0047      +0.0743      +0.12       +0.34
+    3y      17.88%   +0.0031      +0.0322      +0.06       +0.24
+    5y      17.94%   +0.0018      +0.0114      +0.02       +0.16
+
+  VG, theta = -0.2
+    T      ATM vol    skew      curvature    -1 sd wing  +1 sd wing
+    7d      10.77%   -5.9850    -359.0525     +11.10       +5.11
+    14d     13.29%   -3.0063     -48.1655      +9.17       +2.74
+    30d     15.78%   -1.3333      +0.0590      +6.81       +0.33
+    2m      17.39%   -0.6248      +1.6880      +4.92       -1.11
+    3m      18.04%   -0.3993      +1.0807      +4.00       -1.55
+    6m      18.77%   -0.1882      +0.3551      +2.78       -1.71
+    1y      19.16%   -0.0907      +0.0976      +1.92       -1.44
+    2y      19.37%   -0.0444      +0.0252      +1.33       -1.10
+    3y      19.44%   -0.0294      +0.0113      +1.07       -0.93
+    5y      19.49%   -0.0175      +0.0041      +0.82       -0.73
+
+  How fast it flattens: log-log slope of |skew| and curvature against T
+  (a slope of -1 means halving when maturity doubles)
+    model                 |skew| 1m-6m  |skew| 1y-5y   curv 1m-6m   curv 1y-5y
+    Merton, m = 0             -0.45         -0.98        -1.26       -1.99
+    Merton, m = -10%          -0.46         -1.01        -1.37       -2.25
+    VG, theta = 0             -1.35         -1.04        -2.62       -2.08
+    VG, theta = -0.2          -1.09         -1.02        +0.90       -1.97
+  Why it fades: X over T is a sum of independent increments, so its excess kurtosis
+  falls like 1/T and the kernel looks more Gaussian the longer the maturity.
+    Merton, m = 0        curvature falls at every step from 1 week to 5 years: True
+    Merton, m = -10%     curvature falls at every step from 1 week to 5 years: True
+    VG, theta = 0        curvature falls at every step from 1 week to 5 years: True
+    VG, theta = -0.2     curvature falls at every step from 1 week to 5 years: False
+
+============================================================================
+4) A negative mean jump turns the smile into a downward skew
+============================================================================
+  Same diffusion and jump frequency; only the mean jump (Merton m, VG theta) changes.
+  wing gap = IV(k = -1 sd) - IV(k = +1 sd), vol points. Downward skew: skew < 0, gap > 0.
+    T      Merton m=0       Merton m=-10%      VG theta=0       VG theta=-0.2
+           skew    gap      skew    gap        skew    gap      skew    gap
+    7d     +0.0639 -0.51    -0.4833 +4.35    +0.7602 -0.52    -5.9850 +5.99
+    14d    +0.0588 -0.61    -0.4460 +5.17    +0.5041 -0.56    -3.0063 +6.43
+    30d    +0.0506 -0.71    -0.3852 +5.92    +0.2383 -0.57    -1.3333 +6.48
+    2m     +0.0408 -0.75    -0.3109 +6.14    +0.0936 -0.53    -0.6248 +6.03
+    3m     +0.0342 -0.73    -0.2600 +5.97    +0.0523 -0.49    -0.3993 +5.55
+    6m     +0.0227 -0.65    -0.1696 +5.16    +0.0214 -0.40    -0.1882 +4.48
+    1y     +0.0130 -0.51    -0.0941 +4.02    +0.0097 -0.30    -0.0907 +3.36
+    2y     +0.0068 -0.38    -0.0472 +2.95    +0.0047 -0.22    -0.0444 +2.43
+    3y     +0.0045 -0.32    -0.0312 +2.44    +0.0031 -0.18    -0.0294 +2.00
+    5y     +0.0027 -0.25    -0.0185 +1.90    +0.0018 -0.14    -0.0175 +1.55
+  Merton, m = -10%: skew < 0 and left wing above right wing at all 10 maturities   PASS
+  VG, theta = -0.2: skew < 0 and left wing above right wing at all 10 maturities   PASS
+  Merton, m = 0: skew between +0.0027 and +0.0639, always positive
+  VG, theta = 0: skew between +0.0018 and +0.7602, always positive
+  So jumps that are symmetric in log-price give a smile tilted slightly UP in k; the
+  negative mean jump flips the sign and makes the skew 7 to 10 times larger.
+
+total time 41 s
+ALL PASS

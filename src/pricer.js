@@ -5,6 +5,8 @@ import { blurGPU, americanGPU, barrierGPU, stepBarrierGPU } from "./gpu.js";
 import {
   MODE, ALL_IMAGES, BGK_BETA, discountedKernel, mirrorExponent, barrierBlurCPU, stepBarrierCPU, interpCubic,
 } from "./barrier.js";
+import { gridFor, kernel as tentKernel, meanSd, kinkPair } from "./kernels.js";
+import { DEMO_GRID, blurRows } from "./smile.js";
 
 export const S0 = 100;
 export const R = 0.05;
@@ -150,6 +152,85 @@ export async function priceCurve(payoff, { T, sigma, american, gpu = true }) {
   const P32 = gpu ? Float32Array.from(Pv) : Pv;
   const exercise = Uint8Array.from(Vv, (v, i) => (Pv[i] > 0 && v <= P32[i] ? 1 : 0));
   return { ...res, V: Float64Array.from(Vv), exercise, steps };
+}
+
+// ---------------------------------------------------------------------------
+// Fat-tailed kernels (Merton, variance gamma), European only: one blur of the
+// payoff with the model's tent kernel (kernels.js, the code checked against
+// Python), the FFT blur once the kernel is wide. The grid spacing
+// follows the narrowest part of the kernel (the diffusion, for Merton) as
+// above; the grid reaches the kernel's half-width past the plotted range.
+// Kernels are cached, so redrawing the payoff reuses them.
+
+const fatGrids = new Map();
+function fatGrid(k, H) {
+  const key = `${k}:${H}`;
+  if (!fatGrids.has(key)) {
+    const dx = DX0 / 2 ** k;
+    const { x, center } = logGrid(S0, H, dx);
+    const S = Float64Array.from(x, Math.exp);
+    let lo = 0;
+    while (S[lo] < S_MIN - 1e-9) lo++;
+    let hi = S.length - 1;
+    while (S[hi] > S_MAX + 1e-9) hi--;
+    fatGrids.set(key, { k, dx, x, S, center, lo, hi, sampled: null, version: -1 });
+  }
+  return fatGrids.get(key);
+}
+
+// The payoff sampled for the tent kernels: point values, plus the kink
+// correction (kernels.js) at every drawn sample where the slope changes.
+// Between samples a drawn payoff is a straight line in S, a + b e^z, which the
+// tents blur exactly; so only the kinks need anything, and this makes the blur
+// as accurate as the Python reference. (The Keys average above suits the
+// sampled Gaussian; with the tents it would cost ~1e-4.)
+function tentSampled(g, payoff) {
+  if (g.tent && g.tentVersion === payoff.version && g.tentPayoff === payoff) return g.tent;
+  const out = Float64Array.from(g.S, (S) => payoff.value(S));
+  const y = payoff.y;
+  const n = y.length;
+  const h = Payoff.STEP;
+  // slope in S of the segment right of sample i (-1: the extension left of S_MIN)
+  const slope = (i) => (i < 0 ? (y[5] - y[0]) / (5 * h) : i >= n - 1 ? (y[n - 1] - y[n - 6]) / (5 * h) : (y[i + 1] - y[i]) / h);
+  for (let i = 0; i < n; i++) {
+    const jump = slope(i) - slope(i - 1);
+    if (jump === 0) continue;
+    const [j, a, b] = kinkPair(g.x[0], g.dx, S_MIN + i * h);
+    if (j < 0 || j + 1 >= out.length) continue;
+    out[j] += jump * a;
+    out[j + 1] += jump * b;
+  }
+  Object.assign(g, { tent: out, tentVersion: payoff.version, tentPayoff: payoff });
+  return out;
+}
+
+const tentKernels = new Map();
+export function demoKernel(model, p, dx) {
+  const key = JSON.stringify([model, p, dx]);
+  let kern = tentKernels.get(key);
+  if (!kern) {
+    const { y, J } = gridFor(model, p, { ...DEMO_GRID, dx });
+    kern = { y, w: tentKernel(model, y, p), J, dx };
+    tentKernels.set(key, kern);
+    if (tentKernels.size > 48) tentKernels.delete(tentKernels.keys().next().value);
+  }
+  return kern;
+}
+
+// p: { sigma, lam, m, delta } (Merton) or { sigma, theta, nu } (variance gamma)
+export async function priceCurveFat(payoff, { T, model, p, gpu = true }) {
+  if (T <= 0) return priceCurve(payoff, { T, sigma: p.sigma, american: false, gpu });
+  const pp = { ...p, T, r: R };
+  const narrow = model === "merton" ? p.sigma * Math.sqrt(T) : meanSd(model, pp)[1];
+  const k = Math.min(level(Math.max(narrow, 1e-9)), 4);
+  const dx = DX0 / 2 ** k;
+  const kern = demoKernel(model, pp, dx);
+  const g = fatGrid(k, Math.ceil(DISPLAY_HALF + (kern.J + 20) * dx));
+  const P = tentSampled(g, payoff);
+  const V = await blurRows(P, 1, P.length, kern.w, dx, gpu);
+  const disc = Math.exp(-R * T);
+  const view = (A) => A.subarray(g.lo, g.hi + 1);
+  return { S: view(g.S), V: Float64Array.from(view(V), (v) => v * disc), payoff: view(P), dx, steps: 0, exercise: null, taps: kern.w.length };
 }
 
 // ---------------------------------------------------------------------------

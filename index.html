@@ -83,6 +83,10 @@
       .panel.span2 { grid-column: span 2; }
       .panel.full { grid-column: 1 / -1; }
       #mirrors { height: 220px; }
+      #smile { height: 192px; }
+      .sl.jump { grid-template-columns: 112px 1fr; }
+      .sl b { color: var(--text); font-weight: 600; }
+      .chips button.wide { letter-spacing: 0.04em; }
 
       input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; margin: 0; background: none; cursor: pointer; }
       input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--line2); }
@@ -108,6 +112,7 @@
         .panel canvas { height: 96px; }
         .panel.wide canvas, .panel.span2 canvas { height: 120px; }
         #mirrors { height: 190px; }
+        .panel #smile { height: 170px; }
       }
     </style>
   </head>
@@ -179,8 +184,34 @@
             <canvas id="bars"></canvas>
             <div class="foot"><span id="fGpu">—</span><span id="fMs"></span></div>
           </div>
+          <div class="panel wide">
+            <h3>07 / FAT TAILS <em id="ftTag">LOG SCALE</em></h3>
+            <canvas id="logk" aria-label="The blur kernel's density on a log scale, against a Gaussian with the same variance"></canvas>
+            <div class="chips" role="group" aria-label="Blur kernel">
+              <button data-model="gaussian" aria-pressed="true">GAUSS</button>
+              <button data-model="merton">MERTON</button>
+              <button data-model="vg">VG</button>
+              <button data-model="spy" class="wide">SPY FIT</button>
+            </div>
+            <label class="sl jump"><span id="lj1">JUMPS/YR</span><input type="range" id="j1" min="0" max="3" step="0.05" value="1" aria-label="Jump frequency" /></label>
+            <label class="sl jump"><span id="lj2">AVG JUMP</span><input type="range" id="j2" min="-0.3" max="0.15" step="0.005" value="-0.1" aria-label="Average jump size" /></label>
+            <label class="sl jump"><span id="lj3">JUMP VOL</span><input type="range" id="j3" min="0.01" max="0.3" step="0.005" value="0.1" aria-label="Jump volatility" /></label>
+            <div class="foot"><span id="fFt1">—</span><span id="fFt2"></span></div>
+          </div>
           <div class="panel span2">
-            <h3>07 / BARRIER <em id="barTag">OFF</em></h3>
+            <h3>08 / SMILE <em id="smTag">IMPLIED VOL vs STRIKE · LIVE</em></h3>
+            <canvas id="smile" aria-label="Black-Scholes implied volatility against strike, priced on the GPU with the selected kernel"></canvas>
+            <div class="row">
+              <button class="toggle amber" id="spy" aria-pressed="false">REAL SPY SMILE: OFF</button>
+              <div class="chips two" role="group" aria-label="SPY expiry">
+                <button data-expiry="0">NOV 20</button>
+                <button data-expiry="1" aria-pressed="true">DEC 18</button>
+              </div>
+            </div>
+            <div class="foot"><span id="fSm1">—</span><span id="fSm2"></span></div>
+          </div>
+          <div class="panel span2">
+            <h3>09 / BARRIER <em id="barTag">OFF</em></h3>
             <canvas id="barrier" aria-label="Price today against stock price, with the barriers and the knocked-out region"></canvas>
             <div class="row">
               <div class="chips" role="group" aria-label="Barrier">
@@ -201,7 +232,7 @@
             <div class="foot"><span>L <b id="fL">—</b> · U <b id="fU">—</b></span><span id="fBar">PICK A BARRIER</span></div>
           </div>
           <div class="panel wide">
-            <h3>08 / METHOD <em id="methTag">WEIGHTED MIRROR</em></h3>
+            <h3>10 / METHOD <em id="methTag">WEIGHTED MIRROR</em></h3>
             <canvas id="method" aria-label="Error at S = 100 for each method"></canvas>
             <div class="chips three" role="group" aria-label="Pricing method">
               <button data-method="plain">PLAIN</button>
@@ -219,14 +250,14 @@
             <div class="foot"><span id="fMeth1">AT S=100</span><span id="fMeth2"></span></div>
           </div>
           <div class="panel full">
-            <h3>09 / HALL OF MIRRORS <em id="mirTag">—</em></h3>
+            <h3>11 / HALL OF MIRRORS <em id="mirTag">—</em></h3>
             <canvas id="mirrors" aria-label="The payoff and its mirror images across the barriers, appearing one by one"></canvas>
             <div class="foot"><span id="fMir1">—</span><span id="fMir2"></span></div>
           </div>
         </section>
       </div>
       <div class="note">
-        <span>STRIKE 100 · RATE 5% · BLACK-SCHOLES, PRICED BY A GAUSSIAN BLUR ON THE GPU (WEBGPU)</span>
+        <span id="noteL">STRIKE 100 · RATE 5% · BLACK-SCHOLES, PRICED BY A GAUSSIAN BLUR ON THE GPU (WEBGPU)</span>
         <span><a href="./check.html">GPU vs PYTHON CHECK →</a> &nbsp; <a href="./bench.html">BARRIER BENCHMARK →</a></span>
       </div>
     </main>
