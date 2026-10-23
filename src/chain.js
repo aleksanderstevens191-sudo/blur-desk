@@ -15,17 +15,18 @@
 //
 // Black-Scholes at each contract's own implied vol: the kernel width differs
 // from contract to contract, so each gets its own Gaussian kernel and its own
-// row, on a grid spaced so that its strike is a node (the payoff is then exactly
-// piecewise linear in e^z and the blur is exact up to the tails), read at one node.
+// grid, nodes k + j dx so that its strike is a node (the payoff is then exactly
+// piecewise linear in e^y and the blur is exact up to the tails at any spacing),
+// and one output: the kernel dotted with the payoff.
 //
 // Both are the same operation, a dot product of kernel taps with payoff values,
 // so the GPU runs one shader over a list of jobs (kernel offset, row offset,
 // length): one workgroup per job, 64 threads, sums in blocks of 32 then a tree.
-import { gridFor, kernel } from "./kernels.js";
+import { gridFor, kernel, halfWidth, drift } from "./kernels.js";
 import { context, storage } from "./gpu.js";
 
-export const MERTON_GRID = { ptsPerSd: 40, nSd: 10, tail: 1e-15 };
-export const BS_GRID = { ptsPerSd: 10, nSd: 9, tail: 1e-15 };
+export const MERTON_GRID = { ptsPerSd: 15, nSd: 8, tail: 1e-12, dxMax: 0.05 };
+export const BS_GRID = { ptsPerSd: 2, nSd: 8, tail: 1e-12 };
 const STENCIL = 8; // Lagrange nodes around each strike: i0 - 3 .. i0 + 4
 
 const payoffCall = (z, k) => Math.max(Math.exp(z) - Math.exp(k), 0);
@@ -54,9 +55,14 @@ export function chainJobs(data, { models = ["bs", "merton"] } = {}) {
     for (let i = 0; i < n; i++) {
       const { T } = expiries[C.e[i]];
       const p = { T, r: 0, sigma: C.iv[i] };
-      const dx0 = (C.iv[i] * Math.sqrt(T)) / BS_GRID.ptsPerSd;
-      const dx = Math.abs(k[i]) < 1e-12 ? dx0 : Math.abs(k[i]) / Math.ceil(Math.abs(k[i]) / dx0);
-      const { y } = gridFor("gaussian", p, { dx, nSd: BS_GRID.nSd, tail: BS_GRID.tail });
+      // nodes k + j dx: the strike is a node, so the payoff is exactly piecewise linear in
+      // e^y and the blur is exact at any spacing; only the span (nSd) matters
+      const dx = (C.iv[i] * Math.sqrt(T)) / BS_GRID.ptsPerSd;
+      const hw = halfWidth("gaussian", p, { nSd: BS_GRID.nSd, tail: BS_GRID.tail });
+      const mu = drift("gaussian", p);
+      const j0 = Math.floor((mu - hw - k[i]) / dx);
+      const j1 = Math.ceil((mu + hw - k[i]) / dx);
+      const y = Float64Array.from({ length: j1 - j0 + 1 }, (_, j) => k[i] + (j0 + j) * dx);
       const w = kernel("gaussian", y, p);
       const pay = otmCall[i] ? payoffCall : payoffPut;
       const f = Float64Array.from(y, (z) => pay(z, k[i]));
@@ -203,9 +209,10 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nwg: vec3
 
 // Upload the jobs once; returns { encode(encoder), read(), destroy(), bytes } so a
 // benchmark can re-run the same submit. All jobs go out in one dispatch.
-export async function chainJobGPU({ W, Fv, jobs, nJobs }) {
+// pipeline: an already compiled pipeline for CHAIN_WGSL (the benchmark compiles its own).
+export async function chainJobGPU({ W, Fv, jobs, nJobs }, { pipeline = null } = {}) {
   const { device, pipelineFor } = await context();
-  const pipe = pipelineFor(CHAIN_WGSL);
+  const pipe = pipeline ?? pipelineFor(CHAIN_WGSL);
   const bufs = {
     W: storage(device, Float32Array.from(W)),
     Fv: storage(device, Float32Array.from(Fv)),
