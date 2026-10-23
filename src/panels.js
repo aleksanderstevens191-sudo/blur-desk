@@ -745,3 +745,104 @@ export function drawSmile(ctx, W, H, d) {
   }
   glow(ctx, polyline(s.k, s.iv, px, py, a, b), WHITE, 1, 1.5, 1.2);
 }
+
+// 12: the whole SPY chain. One row per expiry (nearest at the top), one cell per
+// out-of-the-money quote at its strike in standard deviations from the forward
+// (ln(K / F) / σ√T, σ the expiry's flat vol), coloured by model minus market vol:
+// amber where the model is above the market, blue below, dark where they agree.
+const BLUE = "96,168,255";
+export const CHAIN_SCALE = 5; // vol points at full colour
+export function chainLayout(W, H, d) {
+  const l = 34;
+  const r = 8;
+  const top = 18;
+  const bot = 16;
+  const rh = (H - top - bot) / d.rows.length;
+  const px = (x) => l + ((x - d.xLo) / (d.xHi - d.xLo)) * (W - l - r);
+  return { l, r, top, bot, rh, px, toX: (x) => d.xLo + ((x - l) / (W - l - r)) * (d.xHi - d.xLo) };
+}
+
+export function drawChain(ctx, W, H, d, hover) {
+  if (!d || typeof d === "string") return idle(ctx, W, H, d || "—");
+  const { l, r, top, bot, rh, px } = chainLayout(W, H, d);
+  const frame = new Path2D();
+  frame.rect(l, top, W - l - r, H - top - bot);
+  glow(ctx, frame, WHITE, 0.15, 1, 0);
+  const grid = new Path2D();
+  for (const x of ticks(d.xLo, d.xHi, 8)) {
+    grid.moveTo(px(x), top);
+    grid.lineTo(px(x), H - bot);
+    label(ctx, x === 0 ? "F" : `${x > 0 ? "+" : "−"}${Math.abs(x)}σ`, px(x), H - 6, { size: 8, alpha: 0.45 });
+  }
+  glow(ctx, grid, WHITE, 0.07, 1, 0);
+  // rows: label as many as fit, days to expiry
+  let lastY = -Infinity;
+  d.rows.forEach((row, i) => {
+    const y = top + (i + 0.5) * rh;
+    if (y - lastY < 11 && !(hover && hover.row === i)) return;
+    lastY = y;
+    const days = row.T * 365;
+    const text = days < 365 ? `${Math.round(days)}D` : `${(days / 365).toFixed(1)}Y`;
+    label(ctx, text, l - 4, y, { align: "right", size: 8, alpha: hover && hover.row === i ? 1 : 0.45 });
+  });
+
+  ctx.globalCompositeOperation = "source-over";
+  const unreached = new Path2D();
+  d.rows.forEach((row, i) => {
+    const y = top + i * rh;
+    for (const c of row.cells) {
+      const x0 = px(c.x0);
+      const w = Math.max(px(c.x1) - x0 - 0.5, 1);
+      if (!d.priced) {
+        ctx.fillStyle = `rgba(${WHITE},0.22)`;
+        ctx.fillRect(px(c.x) - 0.5, y + 0.25 * rh, 1, 0.5 * rh);
+        continue;
+      }
+      ctx.fillStyle = `rgba(${WHITE},0.05)`;
+      ctx.fillRect(x0, y + 0.5, w, rh - 1);
+      if (!Number.isFinite(c.err)) {
+        unreached.rect(x0 + 0.5, y + 1, w - 1, rh - 2);
+        continue;
+      }
+      const a = Math.min(Math.abs(c.err) / CHAIN_SCALE, 1) ** 0.8;
+      ctx.fillStyle = `rgba(${c.err > 0 ? AMBER : BLUE},${(0.95 * a).toFixed(3)})`;
+      ctx.fillRect(x0, y + 0.5, w, rh - 1);
+    }
+  });
+  glow(ctx, unreached, WHITE, 0.5, 1, 0);
+  const fwd = new Path2D();
+  fwd.moveTo(px(0), top);
+  fwd.lineTo(px(0), H - bot);
+  ctx.setLineDash([3, 3]);
+  glow(ctx, fwd, WHITE, 0.35, 1, 0);
+  ctx.setLineDash([]);
+  if (hover) {
+    const c = d.rows[hover.row].cells[hover.i];
+    const box = new Path2D();
+    const x0 = px(c.x0);
+    box.rect(x0 - 1, top + hover.row * rh - 1, Math.max(px(c.x1) - x0, 2) + 2, rh + 2);
+    glow(ctx, box, WHITE, 1, 1, 1);
+  }
+
+  // legend: blue, dark, amber across ±CHAIN_SCALE
+  const lw = Math.min(120, 0.25 * W);
+  const lx = W - r - lw - 64;
+  const name = `${d.model === "flat" ? "FLAT VOL" : "MERTON"} − MARKET VOL`;
+  let cap = d.priced ? `${name} · PUTS LEFT OF F, CALLS RIGHT` : "EVERY OUT-OF-THE-MONEY QUOTE · PRICE THE CHAIN TO COLOUR IT";
+  ctx.font = `500 8px ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
+  if (d.priced && l + ctx.measureText(cap).width > lx - 24) cap = name; // narrow: leave room for the legend
+  label(ctx, cap, l, 7, { align: "left", size: 8, alpha: 0.5 });
+  if (d.priced) {
+    ctx.globalCompositeOperation = "source-over";
+    for (let j = 0; j < lw; j++) {
+      const e = ((j + 0.5) / lw - 0.5) * 2 * CHAIN_SCALE;
+      const a = Math.min(Math.abs(e) / CHAIN_SCALE, 1) ** 0.8;
+      ctx.fillStyle = `rgba(${WHITE},0.05)`;
+      ctx.fillRect(lx + j, 4, 1, 7);
+      ctx.fillStyle = `rgba(${e > 0 ? AMBER : BLUE},${(0.95 * a).toFixed(3)})`;
+      ctx.fillRect(lx + j, 4, 1, 7);
+    }
+    label(ctx, `−${CHAIN_SCALE}`, lx - 4, 8, { align: "right", size: 8, alpha: 0.5 });
+    label(ctx, `+${CHAIN_SCALE} VOL PTS`, lx + lw + 4, 8, { align: "left", size: 8, alpha: 0.5 });
+  }
+}

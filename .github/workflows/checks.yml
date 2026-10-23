@@ -1,7 +1,8 @@
-# Every push: the Python reference checks, the JS core against the Python
-# fixtures and a build of the demo pages, and the WebGPU shaders against the
-# same fixtures in headless Chromium on its software GPU (SwiftShader). A
-# check that fails exits non-zero and turns the run red.
+# Every push: the Python reference checks, the full SPY chain rerun from its
+# saved snapshot, the JS core against the Python fixtures and a build of the
+# demo pages, and the WebGPU shaders against the same fixtures in headless
+# Chromium on its software GPU (SwiftShader). A check that fails exits
+# non-zero and turns the run red.
 name: checks
 
 on:
@@ -36,6 +37,21 @@ jobs:
       - name: Real SPY chain, Merton fit vs flat Black-Scholes
         run: python reference/check_spy_fit.py
 
+  chain:
+    name: Full SPY chain, rerun from the saved snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Filters, parity forwards, early exercise and the Merton fit must reproduce the committed files
+        run: python reference/check_chain_fit.py
+      - name: Out-of-sample Merton vs flat Black-Scholes
+        run: python reference/chain_oos.py --check
+
   node:
     name: JS core vs Python fixtures
     runs-on: ubuntu-latest
@@ -51,6 +67,8 @@ jobs:
         run: node src/test-fft.mjs
       - name: Fat-tailed kernels and the smile vs Python
         run: node src/test-kernels.mjs
+      - name: The whole SPY chain's jobs in 64-bit vs QuantLib and the Merton series
+        run: node src/test-chain.mjs
       - run: npm ci
       - name: Build the demo, check and bench pages
         run: npm run build
@@ -74,3 +92,5 @@ jobs:
         run: node src/test-gpu.mjs fft
       - name: Fat-tailed kernels and the smile on the GPU vs Python
         run: node src/test-gpu.mjs kernels
+      - name: The whole SPY chain in one GPU submit vs QuantLib and the Merton series
+        run: node src/test-gpu.mjs chain

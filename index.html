@@ -58,6 +58,7 @@
       .panel canvas { display: block; width: 100%; height: 118px; }
       .panel .foot { color: var(--muted); font-size: 9px; display: flex; justify-content: space-between; gap: 8px; white-space: nowrap; overflow: hidden; }
       .panel .foot b { color: var(--text); font-weight: 600; }
+      .panel .foot.wrap { flex-wrap: wrap; row-gap: 2px; }
       #pad { cursor: crosshair; touch-action: none; border: 1px solid var(--line); border-radius: 2px; }
       .big { position: absolute; left: 8px; top: 2px; font-size: 20px; font-weight: 700; letter-spacing: 0; font-variant-numeric: tabular-nums; }
       .big.good { color: var(--green); }
@@ -74,6 +75,7 @@
       .toggle { width: 100%; padding: 6px 0; }
       .toggle[aria-pressed="true"] { background: var(--red); border-color: var(--red); color: #fff; }
       .toggle.amber[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: var(--bg); }
+      .toggle.go { background: var(--amber); border-color: var(--amber); color: var(--bg); font-weight: 700; }
       .chips button:disabled, .toggle:disabled, input[type="range"]:disabled { opacity: 0.3; cursor: default; }
       .chips.two { grid-template-columns: repeat(2, 1fr); }
       .chips.three { grid-template-columns: repeat(3, 1fr); }
@@ -84,6 +86,7 @@
       .panel.full { grid-column: 1 / -1; }
       #mirrors { height: 220px; }
       #smile { height: 192px; }
+      #chain { height: 300px; }
       .sl.jump { grid-template-columns: 112px 1fr; }
       .sl b { color: var(--text); font-weight: 600; }
       .chips button.wide { letter-spacing: 0.04em; }
@@ -113,6 +116,7 @@
         .panel.wide canvas, .panel.span2 canvas { height: 120px; }
         #mirrors { height: 190px; }
         .panel #smile { height: 170px; }
+        .panel #chain { height: 260px; }
       }
     </style>
   </head>
@@ -254,11 +258,24 @@
             <canvas id="mirrors" aria-label="The payoff and its mirror images across the barriers, appearing one by one"></canvas>
             <div class="foot"><span id="fMir1">—</span><span id="fMir2"></span></div>
           </div>
+          <div class="panel full">
+            <h3>12 / WHOLE CHAIN <em id="chTag">SPY</em></h3>
+            <canvas id="chain" aria-label="Model minus market implied vol for every out-of-the-money SPY quote, one row per expiry, strikes across"></canvas>
+            <div class="row">
+              <button class="toggle go" id="chainBtn" disabled>PRICE THE WHOLE CHAIN</button>
+              <div class="chips two" role="group" aria-label="Model on the map">
+                <button data-chain="merton" aria-pressed="true">MERTON</button>
+                <button data-chain="flat">FLAT VOL</button>
+              </div>
+            </div>
+            <div class="foot wrap"><span id="fCh1">—</span><span id="fCh2"></span></div>
+            <div class="foot wrap"><span id="fCh3">—</span><span id="fCh4"></span></div>
+          </div>
         </section>
       </div>
       <div class="note">
         <span id="noteL">STRIKE 100 · RATE 5% · BLACK-SCHOLES, PRICED BY A GAUSSIAN BLUR ON THE GPU (WEBGPU)</span>
-        <span><a href="./check.html">GPU vs PYTHON CHECK →</a> &nbsp; <a href="./bench.html">BARRIER BENCHMARK →</a></span>
+        <span><a href="./check.html">GPU vs PYTHON CHECK →</a> &nbsp; <a href="./bench.html">BARRIER BENCHMARK →</a> &nbsp; <a href="./chain-bench.html">CHAIN BENCHMARK →</a></span>
       </div>
     </main>
     <script type="module" src="/src/demo.js"></script>

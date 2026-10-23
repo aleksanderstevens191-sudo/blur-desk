@@ -66,15 +66,16 @@ Broadie, Glasserman and Kou (1997) showed that a barrier checked on N dates beha
 
 - All three methods run as WebGPU compute shaders (`src/gpu.js`). `src/barrier.js` is the same code in 64-bit JavaScript and matches Python to about 1e-12 (`node src/test-barriers.mjs`).
 - `/check.html` runs 26 barrier fixtures from `reference/make_barrier_fixtures.py` on the GPU in 32-bit floats: worst |gpu − Python| is 1.8e-6 (tolerance 1e-4).
-- `/bench.html` prices all 8 types × 32 barriers × 64 strikes = 16,384 options in one dispatch. On an Apple GPU the worst error is 9.3e-6 against the closed form:
+- `/bench.html` prices all 8 types × 32 barriers × 64 strikes = 16,384 options in one dispatch. On an Apple GPU the worst error is 9.3e-6 against the closed form. Both sides measured on the same Mac in one session (`reference/gpu_barrier_bench_mac.txt`, `reference/bench_quantlib_mac.txt`):
 
-  | Same 16,384 barrier options | options/sec |
+  | Same 16,384 barrier options, same Mac | options/sec |
   | --- | --- |
-  | Apple GPU (Metal-3, WebGPU in Chrome), one dispatch, 1.6 ms | **10.2 million** |
-  | QuantLib's analytic barrier formulas, 1 CPU thread (`reference/bench_quantlib.py`) | 305,000 |
-  | the same blur in plain JavaScript, 1 CPU thread, same Mac | 41,600 |
+  | Apple GPU (Metal-3, WebGPU in Chrome), one dispatch, submit to done, 2.10 ms (median of 20) | **7.8 million** |
+  | QuantLib 1.44 `AnalyticBarrierEngine`, 1 CPU thread, repricing after a bump, 25.2 ms | 651,000 |
+  | QuantLib, building the instruments and pricing them, 85.2 ms | 192,000 |
+  | the same blur in plain JavaScript, 1 CPU thread | 38,800 |
 
-  That is about 34 times QuantLib's closed form. The QuantLib figure was measured on a different machine (a 2.8 GHz Xeon), and browser timers are only good to 0.1 ms, so treat the ratio as rough. Four spot prices printed by both programs agree to within 1e-6.
+  That is 12 times QuantLib's closed form on the same machine, or 41 times if QuantLib also has to build its instruments. An earlier version of this README said about 34 times: it divided an earlier Mac GPU run (10.2 million a second) by QuantLib on a different machine (a 2.8 GHz Xeon, 305,000 a second). Browser timers tick in 0.1 ms steps, so the GPU figure is good to about 5%. Four spot prices printed by both programs agree to within 1e-6.
 - The demo has a barrier panel (one or two barriers, knock-out or knock-in), a method switch (plain, weighted, step by step with or without the shift), the knocked-out region shaded on the surface, an animated hall of mirrors, and a live error against the closed form.
 - Near the barrier the Greeks get violent: half a trading day out, an up-and-out call's gamma is 19 times a vanilla's ([plot](docs/barrier_greeks.png)).
 
@@ -172,15 +173,132 @@ Full output: `reference/fft_results.txt`; raw timings in `reference/fft_bench_ap
 
 `/check.html` runs the JS kernels on the GPU against `src/kernel_fixtures.json` (from `reference/make_kernel_fixtures.py`): 7 cases, from the demo's defaults to both SPY fits and a crash-heavy Merton. On an Apple GPU (Metal-3) every case passes: the worst error is 4.0e-5 (tolerance 1e-4) and implied vols agree to 0.004 vol points or better. The software GPU in CI gets 6.3e-5 and 0.04. `node src/test-kernels.mjs` holds the same code to Python within 1e-9 in 64-bit, and the demo's price curves to about 1e-12 of Merton's series and the variance gamma integral.
 
-### What GitHub Actions checks
+## The whole SPY chain
 
-Every push runs three jobs (`.github/workflows/checks.yml`); any failure turns the run red:
+Every SPY option that traded on one afternoon, priced in one GPU submit: 4,738 contracts across 32 expiries, from 3 days to 2.2 years, against QuantLib and against the market.
+
+![Panel 12 of the demo: Merton minus market implied vol for every out-of-the-money SPY quote, one row per expiry](docs/demo_whole_chain.png)
+
+*Panel 12 after PRICE THE WHOLE CHAIN, on the software GPU in CI (timings on a real GPU are in the table below). Rows are expiries, nearest at the top; each cell is an out-of-the-money quote at its strike, in standard deviations from the forward; amber where Merton's vol is above the market's, blue below.*
+
+### The snapshot and the filters
+
+`reference/fetch_spy_chain_full.py` pulled Cboe's delayed quotes (cdn.cboe.com, 15 minutes behind) on 2026-10-23 at 15:12 ET. The quotes are as of 14:57:29 ET with SPY at $760.57: 12,738 contracts (6,369 calls, 6,369 puts), 33 expiries, 491 strikes. The raw response is saved as `data/spy_full_2026-10-23/cboe_raw.json` and flattened to `chain.csv`; Yahoo's chain from the same minute (`yahoo_raw.csv`) is kept as a cross-check.
+
+| Filter, applied in this order | removed | alone |
+| --- | ---: | ---: |
+| expires on the snapshot day | 342 | 342 |
+| zero or missing bid | 464 | 607 |
+| crossed or locked quote (ask ≤ bid) | 0 | 0 |
+| no volume today | 7,107 | 7,643 |
+| **kept** | **4,825** | 38% of the chain |
+
+"Alone" is what the filter would remove if it ran by itself. Another 87 kept contracts, all in the money, have mids outside the European no-arbitrage bounds and get no implied vol, which leaves 4,738 to price.
+
+### Forwards from put-call parity
+
+No dividend yield is assumed. For each expiry the forward is the median of K + (C − P)/D over the 6 strikes nearest the money, with D from the US Treasury curve (2026-10-22 close).
+
+SPY's options are American, and a put's mid includes the value of exercising early, so plain parity pulls the long-dated forwards down ($15 too low at two years) and spreads the six strike estimates up to $3.68 apart. `reference/chain.py` subtracts each option's early-exercise premium (QuantLib finite differences, with SPY's quarterly dividends on the third Fridays of Mar/Jun/Sep/Dec) and repeats until the forwards stop moving. Afterwards the six estimates agree to $0.01-$0.10 on most expiries. The rate implied by regressing C − P on K, between −24% and −1.6% before, comes back to 2.6%-7.0% past seven weeks, against 4.1%-4.6% on the Treasury curve.
+
+The forwards imply $1.72-$1.82 for December's ex-dividend date but only $0.63-$0.92 a quarter beyond eight months. Discounting 50 basis points above Treasury lifts those to $1.6-$2.1, which suggests the market's financing rate sits above Treasury. The forwards here stay on the plain Treasury curve (see the limits below).
+
+### European prices on American options
+
+Everything here is priced as a European option on the parity forward. To compare like with like, each market mid has its early-exercise premium removed first, and mid minus premium, inverted, is the "market vol" in the fits and the heatmap.
+
+The premium is about zero for calls (median $0.000) and small for out-of-the-money puts (median $0.008), but it is wider than half the bid-ask spread on 1,532 of the 4,738 contracts. That includes 77% of the puts within 2% of the money, and it reaches $21.56 on deep in-the-money puts. So on about a third of the chain, a European price on its own would land outside the bid-ask. Full table: `reference/chain_stage1_results.txt`.
+
+### Every contract in one submit
+
+`src/chain.js` prices every contract under two models in one dispatch of 12,488 dot products. Only the out-of-the-money side goes through the GPU; in-the-money prices follow by parity in 64-bit.
+
+- **Black-Scholes at each contract's own implied vol.** Each contract gets its own Gaussian kernel on a grid with its strike on a node, so the payoff is piecewise linear in e^y and the blur is exact at any spacing. It should give back the market (less the premium), and it does.
+- **Merton, fitted per expiry.** One kernel per expiry and two strike rows, a call and a put struck at the forward, read off at every listed strike by 8-point interpolation. This is the smile panel's trick applied to the real chain.
+
+| `/check.html?only=chain`, every contract | Apple GPU (Metal-3) | software GPU (CI) |
+| --- | --- | --- |
+| Black-Scholes, own vol, vs QuantLib `BlackCalculator` | 7.1e-6 dollars | 7.1e-6 dollars |
+| Merton vs Merton's series | 6.1e-6 dollars (before the fit fix below) | 5.4e-6 dollars |
+
+The tolerance is 1e-4. `node src/test-chain.mjs` runs the same jobs in 64-bit on the CPU: 3.5e-13 and 2.3e-10.
+
+### Benchmark on the Mac
+
+Alek's Mac (Apple GPU, 14 CPU cores, Chrome 155, QuantLib 1.44) with all 4,738 contracts. Times are medians of 20 runs, with contracts per second in brackets; spreads are in `reference/chain_bench_results.txt`.
+
+| | Black-Scholes, own vol | Merton per expiry |
+| --- | ---: | ---: |
+| QuantLib, 1 thread | 12.9 ms (367,000/s) | 259.5 ms (18,300/s) |
+| QuantLib, 14 cores | 2.4 ms (1.99M/s) | 61.5 ms (77,000/s) |
+| GPU, compute only | 0.35 ms (13.5M/s) | 1.60 ms (2.96M/s) |
+| GPU, end to end | 39.3 ms (121,000/s) | 61.3 ms (77,400/s) |
+| GPU compute vs QuantLib, 1 thread / 14 cores | 37x / 6.8x | 162x / 38.5x |
+| GPU end to end vs QuantLib, 1 thread / 14 cores | 0.3x / 0.06x | 4.2x / 1.0x |
+
+- QuantLib's Python bindings have no Merton engine, so Merton runs on its Bates engine with the vol of vol pinned at 1e-5 (`reference/bench_chain_quantlib.py`).
+- End to end covers everything:
+  - building the kernels and rows in JavaScript;
+  - a fresh shader compile;
+  - upload, run and read back;
+  - parity for the in-the-money side.
+- The build takes 35-56 ms on one CPU thread. The GPU's own share is 1.8-3.2 ms.
+- The pricing itself is 6.8 times (Black-Scholes) and 38.5 times (Merton) faster than QuantLib on all 14 cores. End to end, the GPU loses to QuantLib's closed-form Black-Scholes, ties 14 cores on Merton, and beats one core on Merton 4 times over.
+- The Merton column was measured with the fit before the fix below. The fixed fit needs 30.6M kernel taps instead of 38.0M, so compute time should drop a little; the rerun is pending.
+
+### How well Merton fits, in and out of sample
+
+Merton has four parameters per expiry; a flat vol has one. Both are fitted to the out-of-the-money market vols (`reference/chain_fit_results.txt`):
+
+| | Merton | flat vol |
+| --- | ---: | ---: |
+| RMS over all 3,320 out-of-the-money quotes, vol points | 1.86 | 16.20 |
+| RMS over quotes worth 50 cents or more | 1.42 | 9.58 |
+| model price inside the bid-ask (less the premium) | 6% | 1% |
+
+The fit weights errors by vega, so cheap far-wing quotes count for little: past about −10 standard deviations Merton's vols sit well below the market's (the blue left edge of the heatmap). On 7 of the 9 expiries beyond eight months the mean jump runs into its −60% bound.
+
+Out of sample (`reference/chain_oos.py`), RMS in vol points, Merton against flat vol. "Core" is |ln K/F| ≤ 4%: 61 quotes per expiry on Oct 23, and the 10 strikes per expiry of the Oct 22 file.
+
+| Fit on → test on | core: Merton | core: flat | all OTM: Merton | all OTM: flat |
+| --- | ---: | ---: | ---: | ---: |
+| Oct 23 Nov 20 → Oct 23 Dec 18 | 1.03 | 1.98 | 4.74 | 22.91 |
+| Oct 23 Dec 18 → Oct 23 Nov 20 | 1.86 | 2.33 | 2.65 | 26.17 |
+| Oct 22 Nov 20 → Oct 22 Dec 18 | 1.01 | 1.53 | | |
+| Oct 22 Dec 18 → Oct 22 Nov 20 | 1.21 | 1.92 | | |
+| Oct 22 both → Oct 23 Nov 20 | 1.34 | 2.61 | 14.71 | 26.56 |
+| Oct 22 both → Oct 23 Dec 18 | 0.70 | 2.19 | 13.87 | 23.13 |
+
+- Merton beats a flat vol on every test.
+- Near the money its out-of-sample error is 32-80% of the flat vol's.
+- Fitted on one whole expiry, it carries to the other at 2.7-4.7 vol points across every strike.
+- Fitted on Oct 22's ten near-the-money strikes, it misses Oct 23's wings by 14 vol points: it never saw them.
+
+### In the demo
+
+- **12 / WHOLE CHAIN.** PRICE THE WHOLE CHAIN prices all 4,738 contracts in one submit and shows the count and the time: building on the CPU, the GPU (the first press includes compiling the shader) and finishing.
+- The heatmap sits under it. MERTON and FLAT VOL switch the model. Hovering a cell names the expiry, strike, market vol and model vol.
+- The footer gives the RMS against the market and the largest |GPU − QuantLib| for Black-Scholes at each quote's own vol.
+- `/chain-bench.html` is the benchmark page behind the table above.
+
+### Limits
+
+- **European pricing on American options.** The models are European. The "market" vols are mids less a modelled early-exercise premium (same vol and dividends as the forward implies), so any error in that premium goes straight into them. The premium itself is worth up to about 1 vol point on near-the-money puts (95th percentile 0.85).
+- **Parity forwards.** These come from the 6 strikes nearest the money, discounted on the Treasury curve. The long-dated implied dividends look low, which points to a financing rate above Treasury. A different discount curve moves every forward, and with it every vol.
+- **The snapshot.** It is one afternoon of 15-minute-delayed quotes, and only contracts that traded that day (7,107 quoted contracts dropped). The quotes are not synchronised with the underlying to the second. The out-of-sample "later day" is the next day, against a 10-strike file from a different source.
+- **Merton per expiry.** Nothing ties the expiries together, the far put wings stay unfitted, and 7 long expiries sit at the bound on the mean jump.
+- **End to end.** The time is dominated by building the kernels in single-threaded JavaScript, not by the GPU.
+
+## What GitHub Actions checks
+
+Every push runs four jobs (`.github/workflows/checks.yml`); any failure turns the run red:
 
 | Job | What it checks |
 | --- | --- |
 | Python reference | `check.py`, the three barrier checks, and for fat tails: `check_kernels.py` (the table above), `check_smile.py` (no smile from a Gaussian, flattening with maturity, the negative-jump skew), `check_calibration.py` (the synthetic chain) and `check_spy_fit.py` (re-runs the SPY fit from the committed snapshot: it must reproduce `src/spy_fit.json`, beat flat Black-Scholes at least 4 times, stay within 1 vol point of every quote and fit a negative mean jump) |
-| JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) and `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves), then a build of every page |
-| WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, and the fat-tailed kernels and smile, all in 32-bit floats within 1e-4 of Python |
+| Full SPY chain | `check_chain_fit.py` reruns the whole pipeline from the saved snapshot (filters, parity forwards with early exercise, European vols, the Merton fit per expiry and the reference prices) and must reproduce the committed `stage1.json` and `src/chain_data.json`; `chain_oos.py --check` must reproduce every out-of-sample number. About 7 minutes |
+| JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves) and `test-chain.mjs` (the whole chain's jobs vs QuantLib and Merton's series), then a build of every page |
+| WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, the fat-tailed kernels and smile, and the whole SPY chain in one submit, all in 32-bit floats within 1e-4 of Python |
 
 ## Layout
 
@@ -222,6 +340,19 @@ src/fft.js, src/gpu-fft.js         the blur through the FFT: 64-bit JS, and WGSL
 src/test-fft.mjs, test-kernels.mjs JS FFT and kernels vs Python
 src/test-gpu.mjs                   /check.html in headless Chromium on a software GPU (used by CI)
 src/fft-bench.js, fft-bench.html   FFT vs direct benchmark, crossover sweep
+
+reference/fetch_spy_chain_full.py  pulls the full SPY chain from Cboe (and Yahoo as a cross-check)
+data/spy_full_2026-10-23/          the full snapshot: cboe_raw.json, chain.csv, yahoo_raw.csv, stage1.json
+reference/chain.py                 filters, Treasury discounting, parity forwards, early-exercise premiums
+reference/chain_stage1.py          the snapshot report: filters, forwards, American vs European
+reference/chain_fit.py             Merton per expiry, QuantLib and series reference prices: src/chain_data.json
+reference/chain_oos.py             out-of-sample Merton vs flat vol
+reference/check_chain_fit.py       CI: reruns the pipeline from the snapshot, compares with the committed files
+reference/bench_chain_quantlib.py  QuantLib on 1 thread and all cores for the chain benchmark
+reference/chain_bench_report.py    the benchmark table from the QuantLib and GPU runs
+src/chain.js                       every contract as dot-product jobs; the shader; one submit
+src/chain-check.js, test-chain.mjs the chain on the GPU (/check.html?only=chain) and in 64-bit JS
+src/chain-bench.js, chain-bench.html  the chain benchmark: compute only and end to end
 .github/workflows/checks.yml       CI: every Python check, every JS test, the build and the GPU check page, on every push
 ```
 
@@ -237,18 +368,22 @@ python3 reference/check_kernels.py
 python3 reference/check_smile.py
 python3 reference/check_calibration.py
 python3 reference/check_spy_fit.py
+python3 reference/check_chain_fit.py   # about 6 minutes
+python3 reference/chain_oos.py --check
 node src/test.mjs
 node src/test-barriers.mjs
 node src/test-fft.mjs
 node src/test-kernels.mjs
+node src/test-chain.mjs
 
 npm install
 npm run dev        # open the printed URL in a WebGPU browser (Chrome, Edge, Safari 26)
                    # /            the interactive demo
                    # /check.html  the GPU vs Python fixture check
-                   #              (?only=fixtures, ?only=fft or ?only=kernels for one section)
+                   #              (?only=fixtures, fft, kernels or chain for one section)
                    # /bench.html  the barrier benchmark
                    # /fft-bench.html  FFT vs direct blur, crossover sweep
+                   # /chain-bench.html  the whole SPY chain: GPU compute only and end to end
 
 npm run build
 npm i --no-save playwright && npx playwright install chromium
@@ -274,3 +409,4 @@ node src/test-gpu.mjs   # /check.html in headless Chromium on a software GPU, as
 - The demo averages the payoff against a cubic (Keys) kernel at each grid point instead of reading it at the point. Reading it at the point leaves the call/put kink costing up to 4e-3 at short expiries; averaging keeps the demo's calls and puts within 1e-5 of Black-Scholes from T = 0.01 to 2 years and σ = 5% to 80% (measured on SwiftShader).
 - With a fat-tailed kernel the demo reads a drawn payoff at the grid points and adds the kink correction wherever its slope changes. The Keys averaging above doesn't match the tent kernels and cost up to 3e-4; point samples plus kink corrections put the demo's 64-bit curves within about 1e-12 of Merton's series.
 - Real option prices are noisy, so edge-detecting raw quotes amplifies noise. Fit a smooth volatility curve first, convert it back to prices, then edge-detect.
+- The chain fit's fast Merton (a Poisson mixture of Black prices on the forward) first drew the number of jumps from Poisson(λ(1 + κ)T), the rate that belongs to the other way of writing Merton's series, instead of Poisson(λT). Its forward came out too high, by 0.1% at a month, 1.4% at a year and 4.6% at two years, so the first per-expiry fits were fits to a wrong model; the GPU, QuantLib and the series were always right. `reference/chain_fit.py` now checks the two forms agree on every contract (7.6e-12) before it writes anything.

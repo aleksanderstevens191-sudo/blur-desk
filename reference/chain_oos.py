@@ -1,6 +1,7 @@
 """Stage 4: out-of-sample test of Merton against flat Black-Scholes on real SPY quotes.
 
-python reference/chain_oos.py   -> report on stdout (reference/chain_oos_results.txt)
+python reference/chain_oos.py           -> report on stdout (reference/chain_oos_results.txt) and chain_oos_results.json
+python reference/chain_oos.py --check   -> the same, compared with the committed chain_oos_results.json (CI)
 
 Each test fits on one set of quotes and measures errors on another, in vol points
 (1 point = 1% of vol), RMS and max, against the European-equivalent market vols
@@ -158,4 +159,15 @@ if __name__ == "__main__":
         out.append(report(f"1. {day}: fit on {b}, test on {a}", [d[b]], [(f"out of sample: {a}", d[a])]))
     out.append(report("2. Fit on Oct 22 (both expiries), test on Oct 23", [d22[a], d22[b]],
                       [(f"out of sample: Oct 23 {a}", d23[a]), (f"out of sample: Oct 23 {b}", d23[b])]))
-    json.dump(out, open(HERE / "chain_oos_results.json", "w"), indent=1)
+    if "--check" not in sys.argv:
+        json.dump(out, open(HERE / "chain_oos_results.json", "w"), indent=1)
+        sys.exit(0)
+    # every fitted parameter and every error must match the committed results
+    old = json.load(open(HERE / "chain_oos_results.json"))
+    flat = lambda rs: [v for r in rs for v in [*r["merton"], r["flat"]] + [x[k] for x in r["rows"] for k in
+                                                                         ("n", "merton_rms", "merton_max", "flat_rms", "flat_max")]]
+    a_, b_ = np.array(flat(out)), np.array(flat(old))
+    d = np.max(np.abs(a_ - b_) / np.maximum(np.abs(b_), 1e-2)) if a_.shape == b_.shape else np.inf
+    print(f"{'PASS' if d < 1e-4 else 'FAIL'} {len(a_)} numbers vs the committed chain_oos_results.json, "
+          f"max relative change {d:.1e} (< 1e-4)")
+    sys.exit(0 if d < 1e-4 else 1)

@@ -1,7 +1,7 @@
 # node src/test-chain.mjs (64-bit CPU twin)
-4738 contracts, 32 expiries: 13129 jobs (8391 Merton row nodes, 38.0M + 0.2M taps), built in 275 ms, run in 109 ms
+4738 contracts, 32 expiries: 12488 jobs (7750 Merton row nodes, 30.6M + 0.2M taps), built in 173 ms, run in 52 ms
 PASS Black-Scholes, own vol, vs QuantLib: max |js - ref| 3.52e-13 dollars over 4738 contracts (worst 2026-12-18 767 call)
-PASS Merton per expiry vs the Merton series: max |js - ref| 1.30e-10 dollars over 4738 contracts (worst 2027-12-17 860 call)
+PASS Merton per expiry vs the Merton series: max |js - ref| 2.31e-10 dollars over 4738 contracts (worst 2029-01-19 895 call)
 PASS Black-Scholes, own vol, vs the market mid: max |js - ref| 3.55e-13 dollars over 4738 contracts (worst 2026-12-31 768 call)
 
 # node src/test-gpu.mjs chain (headless Chromium, SwiftShader software GPU, 32-bit)
@@ -10,12 +10,13 @@ tolerance: |gpu - py| < 0.0001
 
 
 the whole SPY chain in one GPU submit vs QuantLib and the Merton series (src/chain-check.js):
-4738 contracts, 32 expiries, SPY 2026-10-23T14:57:29-04:00: 13129 jobs in one dispatch (8391 Merton strike-row nodes, 38.0M taps; 4738 Black-Scholes kernels, 0.16M taps)
-build 185 ms (CPU, 64-bit), upload + pipeline 6 ms, submit + read back 516 ms, finish 3 ms. Pass: |gpu - ref| < 0.0001 dollars on every contract.
+4738 contracts, 32 expiries, SPY 2026-10-23T14:57:29-04:00: 12488 jobs in one dispatch (7750 Merton strike-row nodes, 30.6M taps; 4738 Black-Scholes kernels, 0.16M taps)
+build 175 ms (CPU, 64-bit), upload + pipeline 6 ms, submit + read back 519 ms, finish 4 ms. Pass: |gpu - ref| < 0.0001 dollars on every contract.
 PASS Black-Scholes, own implied vol, vs QuantLib: max |gpu - ref| 7.13e-6 dollars (worst 2028-12-15 800 call at 93.8550)
 PASS Black-Scholes, own implied vol, vs the market mid: max |gpu - ref| 7.13e-6 dollars (worst 2028-12-15 800 call at 93.8550)
-PASS Merton fitted per expiry vs the Merton series: max |gpu - ref| 5.32e-6 dollars (worst 2028-01-21 790 put at 60.2725)
+PASS Merton fitted per expiry vs the Merton series: max |gpu - ref| 5.37e-6 dollars (worst 2029-01-19 765 call at 116.0177)
 
 all GPU results within 1e-4 of the Python reference
 
 PASS
+

@@ -4,17 +4,18 @@
 // The blur kernel can be fat-tailed (Merton jumps, variance gamma); the smile
 // panel reads that kernel's GPU prices back as Black-Scholes implied vols.
 import { Payoff, priceCurve, priceCurveFat, priceBarrier, snapBarrier, S0, R } from "./pricer.js";
-import { mertonSeries, vgPrice, meanSd } from "./kernels.js";
+import { mertonSeries, vgPrice, meanSd, impliedVol } from "./kernels.js";
 import { smile, ivAt } from "./smile.js";
 import SPY from "./spy_fit.json";
 import { bsCall, bsPut } from "./bs.js";
 import { barrierClosedForm, dkoClosedForm, vanillaBS, mirrorExponent } from "./barrier.js";
 import { gpuInfo } from "./gpu.js";
+import { priceChainGPU, chainJobs, runJobsCPU } from "./chain.js";
 import { Camera, fit } from "./wire.js";
 import { drawScene, toMesh, maskToMesh, MESH_S } from "./scene.js";
 import {
   drawPad, padXY, drawKernel, drawCoil, drawExercise, drawError, drawBars, drawBarrierView, drawMethod, drawMirrors,
-  drawLogKernel, drawSmile,
+  drawLogKernel, drawSmile, drawChain, chainLayout,
 } from "./panels.js";
 
 const SLICES = 12; // surface slices between the payoff and today
@@ -672,6 +673,204 @@ for (const el of document.querySelectorAll("[data-expiry]")) {
   });
 }
 
+// ---- the whole SPY chain (panel 12): every contract in one submit, and the error map ----
+let chain = null; // src/chain_data.json, loaded after the page starts
+let chainData = "LOADING THE SPY CHAIN";
+let chainHover = null;
+let chainModel = "merton";
+let chainRuns = 0;
+let chainBusy = false;
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const expiryName = (ex) => `${MONTHS[+ex.slice(5, 7) - 1]} ${+ex.slice(8)} ${ex.slice(0, 4)}`;
+const thousands = (n) => n.toLocaleString("en-US");
+
+// One cell per out-of-the-money quote (the side the Merton fit used), per expiry row:
+// x = ln(K / F) / σ√T with σ the expiry's flat vol, market vol = the European-equivalent
+// vol (mid less the early-exercise premium, stage 1). prices: the GPU's Merton prices,
+// or null before the first run.
+function chainCells(prices) {
+  const { expiries: E, contracts: C } = chain;
+  const rows = E.map((e) => ({ expiry: e.expiry, T: e.T, cells: [] }));
+  let xLo = 0;
+  let xHi = 0;
+  for (let i = 0; i < C.K.length; i++) {
+    const e = E[C.e[i]];
+    const K = C.K[i];
+    if ((K >= e.F) !== Boolean(C.call[i]) || C.iv_true[i] == null) continue;
+    const x = Math.log(K / e.F) / (e.merton.flat * Math.sqrt(e.T));
+    const cell = { i, x, K, call: Boolean(C.call[i]), mkt: C.iv_true[i], merton: NaN, flat: e.merton.flat };
+    if (prices) {
+      const r = -Math.log(e.D) / e.T;
+      cell.merton = impliedVol(prices[i], e.D * e.F, K, e.T, r, cell.call ? "call" : "put");
+    }
+    rows[C.e[i]].cells.push(cell);
+    xLo = Math.min(xLo, x);
+    xHi = Math.max(xHi, x);
+  }
+  // each cell spans halfway to its neighbours
+  for (const row of rows) {
+    const c = row.cells.sort((a, b) => a.x - b.x);
+    for (let j = 0; j < c.length; j++) {
+      const lo = j > 0 ? 0.5 * (c[j - 1].x + c[j].x) : null;
+      const hi = j < c.length - 1 ? 0.5 * (c[j].x + c[j + 1].x) : null;
+      const half = Math.min(0.5, lo === null ? hi - c[j].x : hi === null ? c[j].x - lo : Infinity);
+      c[j].x0 = lo ?? c[j].x - half;
+      c[j].x1 = hi ?? c[j].x + half;
+    }
+  }
+  // flat vols need no pricing: a vol is a vol
+  return { rows, xLo: Math.floor(xLo), xHi: Math.ceil(xHi), priced: Boolean(prices) || chainModel === "flat", model: chainModel };
+}
+
+// errors in vol points for the model on show; RMS over the quotes it reaches
+function chainErrors(d) {
+  let s = 0;
+  let n = 0;
+  let miss = 0;
+  for (const row of d.rows) {
+    for (const c of row.cells) {
+      c.err = 100 * ((d.model === "flat" ? c.flat : c.merton) - c.mkt);
+      if (Number.isFinite(c.err)) {
+        s += c.err * c.err;
+        n++;
+      } else miss++;
+    }
+  }
+  return { rms: Math.sqrt(s / n), n, miss };
+}
+
+async function priceChain() {
+  if (!chain || chainBusy) return;
+  chainBusy = true;
+  const b = $("chainBtn");
+  b.disabled = true;
+  b.textContent = `PRICING ${thousands(chain.contracts.K.length)} CONTRACTS…`;
+  let res;
+  try {
+    try {
+      if (!useGPU) throw new Error("no GPU");
+      res = await priceChainGPU(chain);
+    } catch (e) {
+      if (useGPU) gpuFailed(e);
+      const t0 = performance.now();
+      const J = chainJobs(chain);
+      const t1 = performance.now();
+      const out = runJobsCPU(J);
+      const t2 = performance.now();
+      res = { ...J.finish(out), J, ms: { build: t1 - t0, gpu: t2 - t1, finish: performance.now() - t2 } };
+    }
+    chainRuns++;
+    const C = chain.contracts;
+    let dQL = 0;
+    let dMid = 0;
+    for (let i = 0; i < C.K.length; i++) {
+      dQL = Math.max(dQL, Math.abs(res.bs[i] - C.bs_ql[i]));
+      dMid = Math.max(dMid, Math.abs(res.bs[i] - 0.5 * (C.bid[i] + C.ask[i])));
+    }
+    chainData = chainCells(res.merton);
+    chainData.res = { ...res, dQL, dMid, first: chainRuns === 1, gpu: useGPU };
+    if (window.blurDesk) window.blurDesk.chain = { ms: res.ms, dQL, dMid, n: C.K.length, jobs: res.J.nJobs };
+  } catch (e) {
+    chainData = `CHAIN FAILED: ${e.message.toUpperCase()}`;
+  }
+  chainBusy = false;
+  b.disabled = false;
+  b.textContent = "PRICE THE WHOLE CHAIN AGAIN";
+  chainStats();
+}
+
+function chainStats() {
+  const d = chainData;
+  if (typeof d === "string") {
+    $("fCh1").textContent = d;
+    return;
+  }
+  const n = chain.contracts.K.length;
+  const quotes = d.rows.reduce((a, r) => a + r.cells.length, 0);
+  if (!d.res) {
+    $("fCh1").innerHTML = `<b>${thousands(n)}</b> CONTRACTS · <b>${d.rows.length}</b> EXPIRIES · ${thousands(quotes)} OUT OF THE MONEY ON THE MAP`;
+    $("fCh2").textContent = "ONE GPU SUBMIT FOR ALL OF THEM";
+  } else {
+    const { ms, J, gpu, first } = d.res;
+    const total = ms.build + ms.gpu + ms.finish;
+    $("fCh1").innerHTML = `<b>${thousands(n)}</b> CONTRACTS IN <b>${total.toFixed(0)} MS</b> · ${gpu ? "ONE GPU SUBMIT" : "CPU FALLBACK"}, ` +
+      `${thousands(J.nJobs)} DOT PRODUCTS`;
+    $("fCh2").textContent = `BUILD ${ms.build.toFixed(0)} · ${gpu ? "GPU" : "CPU"} ${ms.gpu.toFixed(0)}${first && gpu ? " (INCL. COMPILE)" : ""} · ` +
+      `FINISH ${ms.finish.toFixed(0)} MS`;
+  }
+  const e = d.priced ? chainErrors(d) : null;
+  if (e) {
+    const name = d.model === "flat" ? "FLAT VOL" : "MERTON";
+    $("fCh3").innerHTML = `${name} vs MARKET: RMS <b>${e.rms.toFixed(2)}</b> VOL PTS OVER ${thousands(e.n)} QUOTES` +
+      (e.miss ? ` · ${e.miss} OUTSIDE B-S BOUNDS` : "");
+  } else $("fCh3").textContent = "MERTON PER EXPIRY, FITTED TO THESE QUOTES";
+  $("fCh4").innerHTML = d.res
+    ? `B-S AT EACH QUOTE'S VOL: |GPU − QUANTLIB| ≤ <b>${d.res.dQL.toExponential(1)}</b> $`
+    : "EUROPEAN PRICES ON PARITY FORWARDS";
+  chainTag();
+}
+
+function chainTag() {
+  const d = chainData;
+  if (typeof d === "string" || !chainHover) {
+    $("chTag").textContent = chain ? `SPY ${chain.quote_time.slice(0, 10)} ${chain.quote_time.slice(11, 16)} ET · CBOE` : "SPY";
+    return;
+  }
+  const c = d.rows[chainHover.row].cells[chainHover.i];
+  const v = (x) => (Number.isFinite(x) ? `${(x * 100).toFixed(2)}%` : "—");
+  const model = d.model === "flat" ? c.flat : c.merton;
+  $("chTag").textContent = `${expiryName(d.rows[chainHover.row].expiry)} · ${c.K} ${c.call ? "CALL" : "PUT"} · MARKET ${v(c.mkt)} · ` +
+    `${d.model === "flat" ? "FLAT" : "MERTON"} ${v(model)}` + (d.priced && Number.isFinite(c.err) ? ` · ${c.err >= 0 ? "+" : "−"}${Math.abs(c.err).toFixed(2)}` : "");
+}
+
+function setChainModel(m) {
+  chainModel = m;
+  pick("chain", m);
+  if (typeof chainData === "string") return;
+  const res = chainData.res;
+  chainData = chainCells(res ? res.merton : null);
+  chainData.res = res;
+  chainStats();
+}
+
+async function loadChain() {
+  try {
+    chain = (await import("./chain_data.json")).default;
+    chainData = chainCells(null);
+    $("chainBtn").disabled = false;
+  } catch (e) {
+    chainData = `NO CHAIN DATA: ${e.message.toUpperCase()}`;
+  }
+  chainStats();
+}
+$("chainBtn").addEventListener("click", priceChain);
+for (const el of document.querySelectorAll("[data-chain]")) el.addEventListener("click", () => setChainModel(el.dataset.chain));
+const chainCanvas = $("chain");
+chainCanvas.addEventListener("pointermove", (e) => {
+  const d = chainData;
+  if (typeof d === "string") return;
+  const rect = chainCanvas.getBoundingClientRect();
+  const L = chainLayout(rect.width, rect.height, d);
+  const row = Math.floor((e.clientY - rect.top - L.top) / L.rh);
+  const x = L.toX(e.clientX - rect.left);
+  let best = null;
+  if (row >= 0 && row < d.rows.length) {
+    const cells = d.rows[row].cells;
+    let bd = Infinity;
+    cells.forEach((c, i) => {
+      const dist = x < c.x0 ? c.x0 - x : x > c.x1 ? x - c.x1 : 0;
+      if (dist < bd) { bd = dist; best = { row, i }; }
+    });
+    if (bd > L.toX(L.l + 8) - L.toX(L.l)) best = null; // more than 8 px from any cell
+  }
+  chainHover = best;
+  chainTag();
+});
+chainCanvas.addEventListener("pointerleave", () => {
+  chainHover = null;
+  chainTag();
+});
+
 // drawing pad
 const pad = $("pad");
 let last = null;
@@ -731,7 +930,7 @@ scene.addEventListener("pointercancel", () => (drag = null));
 
 // ---- render loop ----
 const ctxs = {};
-for (const id of ["scene", "pad", "kernel", "coil", "exercise", "error", "bars", "barrier", "method", "mirrors", "logk", "smile"]) ctxs[id] = $(id).getContext("2d");
+for (const id of ["scene", "pad", "kernel", "coil", "exercise", "error", "bars", "barrier", "method", "mirrors", "logk", "smile", "chain"]) ctxs[id] = $(id).getContext("2d");
 
 function frame(ms) {
   const t = ms / 1000;
@@ -796,6 +995,10 @@ function frame(ms) {
     const [W, H] = fit($("mirrors"), ctxs.mirrors);
     drawMirrors(ctxs.mirrors, W, H, t, view.barrier && (view.mirrors || "T = 0 · NOTHING TO BLUR"));
   }
+  {
+    const [W, H] = fit(chainCanvas, ctxs.chain);
+    drawChain(ctxs.chain, W, H, chainData, chainHover);
+  }
   requestAnimationFrame(frame);
 }
 
@@ -815,6 +1018,7 @@ async function start() {
   }
   requestAnimationFrame(frame);
   changed();
+  loadChain();
 }
 
 start();

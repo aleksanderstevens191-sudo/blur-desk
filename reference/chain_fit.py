@@ -1,6 +1,6 @@
 """Stage 2, Python side: fit Merton per expiry and write the GPU's inputs and reference prices.
 
-python reference/chain_fit.py [data/spy_full_<date>]  -> report on stdout, src/chain_data.json
+python reference/chain_fit.py [data/spy_full_<date>] [out.json]  -> report on stdout, src/chain_data.json
 
 Input is stage1.json (chain_stage1.py): forwards and the filtered contracts with
 their European implied vols. Every contract with a European vol is priced twice:
@@ -31,7 +31,7 @@ from kernels import merton_series
 from smile import implied_vol
 
 folder = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE.parent / "data" / "spy_full_2026-10-23"
-OUT = HERE.parent / "src" / "chain_data.json"
+OUT = Path(sys.argv[2]) if len(sys.argv) > 2 else HERE.parent / "src" / "chain_data.json"
 
 
 def black(F, K, v, D, call):
@@ -43,9 +43,10 @@ def black(F, K, v, D, call):
 
 
 def merton_vec(F, K, T, D, call, sigma, lam, m, delta, tail=1e-14):
-    """Merton as a Poisson mixture of Black prices on the forward (r drops out)."""
+    """Merton as a Poisson mixture of Black prices on the forward (r drops out): with n
+    jumps (Poisson(lam T)) the forward is F e^(n (m + delta^2/2) - lam kappa T)."""
     kappa = np.expm1(m + 0.5 * delta**2)
-    L = lam * (1 + kappa) * T
+    L = lam * T
     out = np.zeros_like(K)
     n, total = 0, 0.0
     while True:
@@ -142,11 +143,22 @@ if __name__ == "__main__":
     print(f"Reference prices ({time.time() - t1:.0f} s): QuantLib BlackCalculator at each contract's own vol, and the")
     print(f"  Merton series at its expiry's fit. Sanity check, QuantLib Black-Scholes vs the market mid: max "
           f"|diff| {gap.max():.1e} dollars over {len(priced)} contracts")
+    # the fit's fast Merton (merton_vec) must be the same model as the series the GPU is checked against
+    fast = np.empty(len(priced))
+    for e in exps:
+        sel = [j for j, c in enumerate(priced) if c["expiry"] == e["expiry"]]
+        if sel:
+            p = e["merton"]
+            fast[sel] = merton_vec(e["F"], np.array([priced[j]["K"] for j in sel]), e["T"], e["D"],
+                                   np.array([priced[j]["cp"] == "call" for j in sel]), p["sigma"], p["lam"], p["m"], p["delta"])
+    gap = np.max(np.abs(fast - np.array(mert)))
+    print(f"  The fit's Merton (Poisson mixture of Black on the forward) vs the series: max |diff| {gap:.1e} dollars")
+    assert gap < 1e-8, "the fitted Merton and the reference series disagree"
 
     idx = {e["expiry"]: i for i, e in enumerate(exps)}
     json.dump({
         "source": s1["source"], "quote_time": s1["quote_time"], "spot": s1["spot"],
-        "expiries": [{k: e[k] for k in ("expiry", "T", "r", "D", "F")} | {"merton": e["merton"]} for e in exps],
+        "expiries": [{**{k: e[k] for k in ("expiry", "T", "r", "D", "F")}, "merton": e["merton"]} for e in exps],
         "contracts": {
             "e": [idx[c["expiry"]] for c in priced],
             "K": [c["K"] for c in priced],
@@ -155,10 +167,11 @@ if __name__ == "__main__":
             "ask": [c["ask"] for c in priced],
             "iv": [c["iv"] for c in priced],
             "eep": [round(c["eep"], 6) if c["eep"] is not None else None for c in priced],
+            "iv_true": [c["iv_true"] for c in priced],
             "bs_ql": bs_ql,
             "merton": mert,
         },
     }, open(OUT, "w"), separators=(",", ":"))
-    print(f"\nwrote {OUT.relative_to(HERE.parent)} ({OUT.stat().st_size / 1e3:.0f} kB): {len(exps)} expiries with "
+    print(f"\nwrote {OUT.name} ({OUT.stat().st_size / 1e3:.0f} kB): {len(exps)} expiries with "
           f"forwards and Merton fits, {len(priced)} contracts with reference prices")
     print(f"total time {time.time() - t0:.0f} s")

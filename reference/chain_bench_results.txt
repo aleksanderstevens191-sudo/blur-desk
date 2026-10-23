@@ -34,3 +34,8 @@ only good to about 30%. "Compute only" waits on device.queue.onSubmittedWorkDone
 adds jitter: for both models together it came out slower (1.55 ms) than compute plus read back
 (0.60 ms). End to end is dominated by building kernels and rows in JavaScript on one CPU thread
 (35-56 ms per model); the GPU's own share (upload, run, read back) is 1.8-5.9 ms.
+
+Merton was measured with the per-expiry fit from before the Poisson-rate fix in reference/chain_fit.py
+(see the README's notes on accuracy): 8,391 strike-row nodes and 38.0M kernel taps. The fixed fit
+needs 7,750 nodes and 30.6M taps, so the Merton GPU rows are slightly pessimistic until rerun.
+Black-Scholes is unaffected (it prices at each contract's own vol).
