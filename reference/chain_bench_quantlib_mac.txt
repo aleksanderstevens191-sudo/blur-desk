@@ -1,0 +1,12 @@
+QuantLib 1.44, Python 3.13.2, arm64 arm, 14 cores
+4738 SPY contracts, 32 expiries (2026-10-23T14:57:29-04:00); 20 runs each, times in ms: median [min, max]
+
+Black-Scholes (BlackCalculator): max |QuantLib - reference| 1.6e-13 dollars
+  1 thread       12.9 [12.5, 20.0] ms  ->       367,069 contracts/sec
+  14 cores        2.4 [2.2, 3.3] ms  ->     1,987,850 contracts/sec
+
+Merton (Bates engine, vol of vol 1e-5): max |QuantLib - reference| 1.0e-06 dollars
+  1 thread      259.5 [258.0, 265.4] ms  ->        18,260 contracts/sec
+  14 cores       61.5 [51.7, 80.9] ms  ->        77,012 contracts/sec
+
+JSON {"quantlib": "1.44", "cores": 14, "contracts": 4738, "runs": 20, "machine": "macOS-27.0.1-arm64-arm-64bit-Mach-O", "bs": {"one": {"median": 0.012907666969113052, "min": 0.012457292003091425, "max": 0.019997542025521398, "p25": 0.01255299977492541, "p75": 0.017012010779581033}, "all": {"median": 0.002383479499258101, "min": 0.0022265000152401626, "max": 0.003255832998547703, "p25": 0.0022961564973229542, "p75": 0.0024331769964192063}, "max_err_vs_ref": 1.6342482922482304e-13}, "merton": {"one": {"median": 0.2594792705203872, "min": 0.25799345900304615, "max": 0.2654249999905005, "p25": 0.2586648222495569, "p75": 0.2607473955140449}, "all": {"median": 0.061523041484178975, "min": 0.05165583296911791, "max": 0.08087633299874142, "p25": 0.058706833253381774, "p75": 0.06535880202136468}, "max_err_vs_ref": 1.019447375393348e-06}}
