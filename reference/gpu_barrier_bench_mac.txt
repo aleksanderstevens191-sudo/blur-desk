@@ -1,0 +1,15 @@
+# /bench.html on Alek's Mac (Chrome 155, apple metal-3), 2026-10-23, same session as reference/bench_quantlib_mac.txt
+GPU: apple metal-3
+market: S0=100 sigma=0.2 T=1 r=0.05; weighted mirror, one blur per option, dx=0.002 in ln S
+options: 8 types x 32 barriers x 64 strikes = 16,384
+
+setup on the CPU (payoff rows, kernel, option table): 27.3 ms, once
+kernel: 1631 taps, so 26.7M tap evaluations per dispatch
+
+one dispatch, submit to done (median of 20): 2.10 ms  ->  7,801,905 options/sec
+including reading the prices back (median of 5): 1.70 ms  ->  9,637,647 options/sec
+
+max |gpu - closed form| over all 16,384 options: 9.25e-6  PASS (< 1e-4)
+  worst: up-and-out put K=129.84 H=113.428 gpu=16.439524 closed form=16.439514
+
+same blur on the CPU in plain JavaScript (1 thread, 64-bit), 1024 options: 38,788 options/sec

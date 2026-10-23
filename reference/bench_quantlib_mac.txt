@@ -1,0 +1,10 @@
+QuantLib 1.44 AnalyticBarrierEngine, Python bindings, 1 CPU thread
+options: 8 types x 32 barriers x 64 strikes = 16,384
+  build instruments:          58.6 ms
+  first pricing:              26.6 ms  ->  615,153 options/sec
+  reprice after a bump:       25.2 ms  ->  650,745 options/sec (median of 5)
+  build + price:              85.2 ms  ->  192,283 options/sec
+  #0: down-and-out call K=70.0000 H=99.0050  2.71554810
+  #5461: up-and-out call K=91.6667 H=125.8600  5.14344375
+  #10922: down-and-in put K=113.3333 H=88.5148  10.65897659
+  #16383: up-and-in put K=135.0000 H=139.9339  0.32947521

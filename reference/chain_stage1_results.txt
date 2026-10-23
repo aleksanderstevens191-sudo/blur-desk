@@ -1,0 +1,92 @@
+SPY option chain snapshot data/spy_full_2026-10-23/chain.csv
+  source      Cboe delayed quotes (cdn.cboe.com, 15-min delayed)
+  quotes at   2026-10-23 14:57:29 EDT  (fetched 2026-10-23T15:12:49-04:00)
+  spot        760.57
+  contracts   12738: 6369 calls, 6369 puts, 33 expiries (2026-10-23 to 2029-01-19), 491 distinct strikes
+  cross-check yahoo_raw.csv (fetched the same minute): 8757 two-sided contracts in both; mids equal on 3769, median gap 0.06 half-spreads, 9.1% differ by more than a half-spread
+
+Filters, applied in this order (a contract is counted under the first filter that removes it)
+  filter                                    removed  on its own
+  expires on the snapshot day                   342         342
+  zero or missing bid                           464         607
+  crossed or locked quote (ask <= bid)            0           0
+  no volume today                              7107        7643
+  kept                                         4825   (38% of the chain)
+
+Spot implied by the options (D F of expiries with no ex-dividend date before them): 760.50 vs quoted 760.57
+Forwards from put-call parity, discounting on the US Treasury curve of 2026-10-22 (no dividend yield assumed)
+  F plain: median of K + (C - P)/D over the 6 strikes nearest the money, raw mids (American prices), using
+  every two-sided quote (parity needs a call and a put at one strike, not volume).
+  F adj: the same after subtracting each option's early-exercise premium, iterated to a fixed point (5 passes, 247 s).
+  spread: max - min of the 6 strike estimates, plain then adj. noise: the quotes' half-spread on C - P, in dollars of F.
+  PV divs: implied spot - D F (adj); each: per quarterly ex-date (3rd Friday of Mar/Jun/Sep/Dec, SPY's
+  schedule). q: the same carry as a flat yield. box r: rate implied by regressing C - P on K within 5% of
+  F, plain mids then premium-adjusted (Treasury r for comparison).
+  expiry       days  kept      r   F plain     F adj spread plain   adj  noise  PV divs  ex   each       q box r plain     adj
+  2026-10-26   3.04   184  4.07%    760.65    760.66         0.01  0.02   0.01     0.10   0      -   1.56%           -       -
+  2026-10-27   4.04   175  4.07%    760.75    760.76         0.01  0.01   0.01     0.08   0      -   0.98%           -       -
+  2026-10-28   5.04   174  4.07%    760.84    760.86         0.01  0.01   0.02     0.06   0      -   0.62%           -       -
+  2026-10-29   6.04   177  4.07%    760.93    760.96         0.03  0.01   0.02     0.05   0      -   0.42%           -       -
+  2026-10-30   7.04   367  4.07%    761.17    761.22         0.06  0.03   0.02    -0.12   0      -  -0.84%           -       -
+  2026-11-02  10.04   145  4.07%    761.29    761.35         0.04  0.01   0.03     0.00   0      -  -0.00%           -       -
+  2026-11-03  11.04   133  4.07%    761.38    761.44         0.04  0.01   0.03    -0.01   0      -  -0.03%           -       -
+  2026-11-04  12.04   137  4.07%    761.48    761.56         0.04  0.01   0.03    -0.04   0      -  -0.15%           -       -
+  2026-11-05  13.04    32  4.07%    761.55    761.65         0.19  0.03   0.04    -0.04   0      -  -0.14%           -       -
+  2026-11-06  14.04   210  4.07%    761.77    761.87         0.05  0.02   0.04    -0.18   0      -  -0.60%           -       -
+  2026-11-13  21.04   204  4.07%    762.30    762.46         0.06  0.01   0.04    -0.17   0      -  -0.39%           -       -
+  2026-11-20  28.04   276  4.07%    762.85    763.05         0.06  0.01   0.04    -0.17   0      -  -0.30%           -       -
+  2026-11-27  35.04   176  4.08%    763.39    763.67         0.10  0.03   0.04    -0.18   0      -  -0.25%     -24.39%  -1.69%
+  2026-11-30  38.04   275  4.08%    763.50    763.79         0.08  0.02   0.04    -0.05   0      -  -0.06%     -21.14%  -2.25%
+  2026-12-04  42.04   180  4.09%    763.99    764.33         0.10  0.01   0.05    -0.24   0      -  -0.27%     -20.61%   0.59%
+  2026-12-18  56.04   312  4.11%    764.34    763.58         0.10  0.02   0.04     1.72   1   1.73   1.47%      -9.76%   4.21%
+  2026-12-31  69.04   240  4.13%    764.43    764.65         0.07  0.01   0.05     1.81   1   1.82   1.26%      -2.55%   7.01%
+  2027-01-15  84.04   160  4.16%    765.80    766.43         0.58  0.09   0.05     1.38   1   1.39   0.79%      -6.23%   2.64%
+  2027-01-29  98.04   122  4.18%    766.97    767.76         0.15  0.02   0.05     1.31   1   1.32   0.64%      -4.30%   4.48%
+  2027-02-19 119.04    87  4.20%    768.80    769.88         0.85  0.11   0.04     1.09   1   1.10   0.44%      -4.50%   6.28%
+  2027-02-26 126.04    86  4.20%    769.36    770.57         0.19  0.03   0.06     1.03   1   1.04   0.39%      -3.73%   6.84%
+  2027-03-19 147.04   125  4.22%    770.79    771.43         1.05  0.09   0.06     2.07   2   1.05   0.68%      -4.39%   5.15%
+  2027-03-31 159.04    88  4.23%    771.00    772.31         0.95  0.07   0.07     2.28   2   1.16   0.69%      -4.50%   3.17%
+  2027-06-17 237.04   121  4.28%    777.52    780.25         1.35  0.06   0.07     1.64   2   0.83   0.33%      -4.30%   3.85%
+  2027-06-30 250.04    66  4.29%    778.06    780.38         1.36  0.57   0.09     2.71   3   0.92   0.52%      -3.95%   3.11%
+  2027-09-17 329.04   107  4.34%    784.73    788.28         1.67  0.04   0.10     2.46   4   0.63   0.36%      -3.66%   3.77%
+  2027-09-30 342.04    48  4.35%    784.76    788.97         0.35  0.03   0.12     3.03   4   0.77   0.43%      -2.10%   4.76%
+  2027-12-17 420.04   137  4.40%    791.17    796.75         2.31  0.53   0.15     3.07   5   0.63   0.35%      -3.06%   4.15%
+  2028-01-21 455.04    93  4.42%    793.57    800.06         2.02  0.10   0.17     3.33   5   0.69   0.35%      -2.24%   4.45%
+  2028-06-16 602.04    57  4.51%    804.80    814.55         2.91  0.83   0.50     4.40   7   0.65   0.35%      -2.25%   4.43%
+  2028-12-15 784.04    78  4.61%    817.85    832.82         3.68  0.78   0.64     6.15   9   0.72   0.38%      -1.56%   4.77%
+  2029-01-19 819.04    53  4.61%    820.06    835.63         2.86  1.60   2.35     7.05   9   0.82   0.42%      -1.65%   4.14%
+
+European implied vols on the parity forwards: 4738 of 4825 contracts invert
+  87 mids lie outside the European no-arbitrage bounds (87 of them in the money): dropped from pricing
+
+American vs European: early-exercise premium of every contract (4738 contracts, QuantLib FD 200 x 400, 70 s)
+  The market mid is an American price. Pricing it as European on the parity forward misses the
+  early-exercise premium EEP = American - European (same vol, same dividends). Columns: EEP in dollars,
+  EEP over the quote's half-spread, and EEP in vol points (how far the European implied vol of the
+  mid sits above the American one). no vol: mid - EEP is below the European lower bound, i.e. the
+  option trades at or near exercise value and carries no usable European vol.
+                                  n    med $    max $  med/hs     >hs  med vp  p95 vp no vol
+  calls OTM (> 2%)              984    0.000    0.589    0.00     15%   0.000    0.21      0
+  calls ATM (within 2%)         559    0.000    1.034    0.00     12%   0.000    0.26      0
+  calls ITM 2-10%               416    0.000    1.427    0.00     13%   0.000    0.67      0
+  calls ITM > 10%               271    0.000    1.698    0.00     14%   0.000    8.93      4
+  puts OTM (> 2%)              1759    0.008    9.579    0.52     39%   0.030    0.60      0
+  puts ATM (within 2%)          553    0.129   17.839    2.28     77%   0.206    0.85      2
+  puts ITM 2-10%                193    0.573   20.913    1.31     53%   1.467    3.93      4
+  puts ITM > 10%                  3    6.328   21.559    3.11    100%   4.805    7.13      0
+  all                          4738    0.002   21.559    0.17     32%   0.013    1.16     10
+
+  Out-of-the-money and at-the-money contracts only, by time to expiry
+  up to 30 days                1709    0.000    0.521    0.02     17%   0.004    0.27      2
+    (in the money)              419    0.000    1.317    0.00      7%   0.000    2.91      4
+  30 to 180 days               1548    0.011    1.800    0.65     44%   0.032    0.51      0
+    (in the money)              303    0.305    6.328    0.54     46%   0.255    7.85      4
+  over 180 days                 598    0.121   17.839    1.97     61%   0.086    1.36      0
+    (in the money)              161    0.333   21.559    0.19     18%   0.097    3.81      0
+
+Summary: 1532 of 4738 contracts have an early-exercise premium wider than half their bid-ask spread;
+  out of the money and at the money: 1335 of 3855. Pricing from here on is European on parity forwards; the European model is
+  reported on every contract, and the comparisons that matter (smile, fits) use the OTM side.
+
+wrote data/spy_full_2026-10-23/stage1.json: 32 expiries, forwards, and the 4825 filtered contracts with vols and premiums
+total time 324 s

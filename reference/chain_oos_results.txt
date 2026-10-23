@@ -1,0 +1,47 @@
+Out-of-sample: Merton vs flat Black-Scholes, errors in vol points against European-equivalent market vols
+  all: every out-of-the-money quote kept by the stage 1 filters; core: |ln K/F| <= 4%
+  Oct 23: 2026-11-20 195 OTM quotes, strikes 300-890, 2026-12-18 217 OTM quotes, strikes 200-995
+  Oct 22: 2026-11-20 10 OTM quotes, strikes 740-795, 2026-12-18 10 OTM quotes, strikes 740-795
+
+1. Oct 23: fit on 2026-11-20, test on 2026-12-18
+  Merton fit: sigma 12.42%, lam 0.22/yr, m -27.60%, delta 20.29%;  flat vol 14.40%
+                                     domain    n  Merton RMS    max   flat RMS    max   Merton/flat
+  in sample: 2026-11-20              all     195        3.28  17.66      26.34  86.72          0.12
+  in sample: 2026-11-20              core     61        1.61   2.75       2.43   5.07          0.66
+  out of sample: 2026-12-18          all     217        4.74  27.57      22.91  87.17          0.21
+  out of sample: 2026-12-18          core     61        1.03   1.81       1.98   4.13          0.52
+
+1. Oct 23: fit on 2026-12-18, test on 2026-11-20
+  Merton fit: sigma 12.44%, lam 0.14/yr, m -37.68%, delta 25.81%;  flat vol 14.70%
+                                     domain    n  Merton RMS    max   flat RMS    max   Merton/flat
+  in sample: 2026-12-18              all     217        2.99  19.62      22.75  86.87          0.13
+  in sample: 2026-12-18              core     61        1.26   2.33       1.86   3.82          0.67
+  out of sample: 2026-11-20          all     195        2.65   6.70      26.17  86.41          0.10
+  out of sample: 2026-11-20          core     61        1.86   3.28       2.33   4.77          0.80
+
+1. Oct 22: fit on 2026-11-20, test on 2026-12-18
+  Merton fit: sigma 8.84%, lam 3.56/yr, m -5.62%, delta 4.50%;  flat vol 14.11%
+                                     domain    n  Merton RMS    max   flat RMS    max   Merton/flat
+  in sample: 2026-11-20              all      10        0.02   0.04       1.89   4.04          0.01
+  in sample: 2026-11-20              core     10        0.02   0.04       1.89   4.04          0.01
+  out of sample: 2026-12-18          all      10        1.01   1.24       1.53   3.02          0.66
+  out of sample: 2026-12-18          core     10        1.01   1.24       1.53   3.02          0.66
+
+1. Oct 22: fit on 2026-12-18, test on 2026-11-20
+  Merton fit: sigma 7.64%, lam 2.19/yr, m -6.42%, delta 7.90%;  flat vol 13.88%
+                                     domain    n  Merton RMS    max   flat RMS    max   Merton/flat
+  in sample: 2026-12-18              all      10        0.02   0.03       1.53   3.24          0.01
+  in sample: 2026-12-18              core     10        0.02   0.03       1.53   3.24          0.01
+  out of sample: 2026-11-20          all      10        1.21   1.55       1.92   4.26          0.63
+  out of sample: 2026-11-20          core     10        1.21   1.55       1.92   4.26          0.63
+
+2. Fit on Oct 22 (both expiries), test on Oct 23
+  Merton fit: sigma 9.20%, lam 1.89/yr, m -8.59%, delta 4.24%;  flat vol 13.99%
+                                     domain    n  Merton RMS    max   flat RMS    max   Merton/flat
+  in sample: 2026-11-20+2026-12-18   all      20        0.53   0.70       1.72   4.15          0.31
+  in sample: 2026-11-20+2026-12-18   core     20        0.53   0.70       1.72   4.15          0.31
+  out of sample: Oct 23 2026-11-20   all     195       14.71  53.47      26.56  87.12          0.55
+  out of sample: Oct 23 2026-11-20   core     61        1.34   1.61       2.61   5.48          0.51
+  out of sample: Oct 23 2026-12-18   all     217       13.87  54.19      23.13  87.57          0.60  (1 quotes Merton can't reach)
+  out of sample: Oct 23 2026-12-18   core     61        0.70   1.39       2.19   4.53          0.32
+
