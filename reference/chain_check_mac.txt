@@ -1,0 +1,12 @@
+# /check.html?only=chain on Alek's Mac (Chrome 155, apple metal-3), 2026-10-23
+GPU: apple metal-3
+tolerance: |gpu - py| < 0.0001
+
+the whole SPY chain in one GPU submit vs QuantLib and the Merton series (src/chain-check.js):
+4738 contracts, 32 expiries, SPY 2026-10-23T14:57:29-04:00: 13129 jobs in one dispatch (8391 Merton strike-row nodes, 38.0M taps; 4738 Black-Scholes kernels, 0.16M taps)
+build 100 ms (CPU, 64-bit), upload + pipeline 3 ms, submit + read back 5 ms, finish 2 ms. Pass: |gpu - ref| < 0.0001 dollars on every contract.
+PASS Black-Scholes, own implied vol, vs QuantLib: max |gpu - ref| 7.13e-6 dollars (worst 2028-12-15 800 call at 93.8550)
+PASS Black-Scholes, own implied vol, vs the market mid: max |gpu - ref| 7.13e-6 dollars (worst 2028-12-15 800 call at 93.8550)
+PASS Merton fitted per expiry vs the Merton series: max |gpu - ref| 6.08e-6 dollars (worst 2028-12-15 780 call at 117.9350)
+
+all GPU results within 1e-4 of the Python reference

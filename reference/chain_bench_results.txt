@@ -1,0 +1,36 @@
+4738 SPY contracts, median of 20 (QuantLib) and 20 (GPU) runs; GPU apple metal-3; QuantLib 1.44 on 14 cores
+
+| model | method | time, ms (median [min, max]) | contracts/sec | GPU speed-up |
+|---|---|---|---:|---:|
+| Black-Scholes, own vol | QuantLib, 1 thread | 12.91 [12.46, 20.00] | 367,069 | |
+| Black-Scholes, own vol | QuantLib, 14 cores | 2.38 [2.23, 3.26] | 1,987,850 | |
+| Black-Scholes, own vol | GPU, compute only | 0.35 [0.30, 0.70] | 13,537,143 | |
+| Black-Scholes, own vol | GPU, end to end | 39.25 [35.40, 148.40] | 120,713 | |
+| Black-Scholes, own vol | GPU compute only vs QuantLib 1 thread | | | 36.9x |
+| Black-Scholes, own vol | GPU compute only vs QuantLib 14 cores | | | 6.8x |
+| Black-Scholes, own vol | GPU end to end vs QuantLib 1 thread | | | 0.3x |
+| Black-Scholes, own vol | GPU end to end vs QuantLib 14 cores | | | 0.1x |
+| Merton per expiry | QuantLib, 1 thread | 259.48 [257.99, 265.42] | 18,260 | |
+| Merton per expiry | QuantLib, 14 cores | 61.52 [51.66, 80.88] | 77,012 | |
+| Merton per expiry | GPU, compute only | 1.60 [1.40, 3.40] | 2,961,250 | |
+| Merton per expiry | GPU, end to end | 61.25 [59.90, 425.60] | 77,355 | |
+| Merton per expiry | GPU compute only vs QuantLib 1 thread | | | 162.2x |
+| Merton per expiry | GPU compute only vs QuantLib 14 cores | | | 38.5x |
+| Merton per expiry | GPU end to end vs QuantLib 1 thread | | | 4.2x |
+| Merton per expiry | GPU end to end vs QuantLib 14 cores | | | 1.0x |
+
+GPU end to end, bs: build 35.5 ms, shader compile 1.4 ms, upload + run + read back 1.8 ms, finish 0.1 ms (medians)
+GPU end to end, merton: build 56.2 ms, shader compile 1.4 ms, upload + run + read back 3.2 ms, finish 0.4 ms (medians)
+GPU end to end, both: build 166.6 ms, shader compile 2.1 ms, upload + run + read back 5.9 ms, finish 0.9 ms (medians)
+
+Barrier benchmark rerun on the same Mac (reference/bench_quantlib_mac.txt, reference/gpu_barrier_bench_mac.txt):
+  16,384 single barriers. QuantLib AnalyticBarrierEngine, 1 thread: 650,745 options/sec repricing
+  (25.2 ms), 192,283 options/sec building and pricing. GPU, one dispatch submit to done: 7,801,905
+  options/sec (2.10 ms). Ratio on one machine: 12.0x QuantLib's repricing, 40.6x build + price.
+  The earlier ~34x divided the Mac GPU by QuantLib on the container's Xeon (305k options/sec).
+
+Notes. Browser timers here tick in 0.1 ms steps, so the Black-Scholes compute time (0.35 ms) is
+only good to about 30%. "Compute only" waits on device.queue.onSubmittedWorkDone, whose wake-up
+adds jitter: for both models together it came out slower (1.55 ms) than compute plus read back
+(0.60 ms). End to end is dominated by building kernels and rows in JavaScript on one CPU thread
+(35-56 ms per model); the GPU's own share (upload, run, read back) is 1.8-5.9 ms.

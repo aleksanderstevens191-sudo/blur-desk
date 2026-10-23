@@ -1,0 +1,24 @@
+# /chain-bench.html on Alek's Mac (Chrome 155, apple metal-3), 2026-10-23
+GPU: apple metal-3   (device setup 11 ms, once per page, not counted below)
+Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36
+4738 SPY contracts, 32 expiries, quotes 2026-10-23T14:57:29-04:00; 20 runs each: median [min, max]
+
+Black-Scholes, own vols: 4738 prices, 4738 jobs, 0.2M taps; max error (dollars): Black-Scholes vs QuantLib 7.1e-6
+  compute only               0.35 [0.30, 0.70] ms  ->    13,537,143 contracts/sec
+  compute + read back        0.60 [0.50, 0.80] ms  ->     7,896,666 contracts/sec
+  end to end                39.25 [35.40, 148.40] ms  ->       120,713 contracts/sec
+    of which (medians): build 35.5 ms, shader compile 1.4 ms, upload + run + read back 1.8 ms, finish 0.1 ms
+
+Merton per expiry: 4738 prices, 8391 jobs, 38.0M taps; max error (dollars): Merton vs series 6.1e-6
+  compute only               1.60 [1.40, 3.40] ms  ->     2,961,250 contracts/sec
+  compute + read back        2.85 [1.50, 5.30] ms  ->     1,662,456 contracts/sec
+  end to end                61.25 [59.90, 425.60] ms  ->        77,355 contracts/sec
+    of which (medians): build 56.2 ms, shader compile 1.4 ms, upload + run + read back 3.2 ms, finish 0.4 ms
+
+both models: 9476 prices, 13129 jobs, 38.2M taps; max error (dollars): Black-Scholes vs QuantLib 7.1e-6, Merton vs series 6.1e-6
+  compute only               1.55 [0.40, 1.90] ms  ->     3,056,774 contracts/sec
+  compute + read back        0.60 [0.50, 1.10] ms  ->     7,896,666 contracts/sec
+  end to end               191.20 [96.60, 431.70] ms  ->        24,780 contracts/sec
+    of which (medians): build 166.6 ms, shader compile 2.1 ms, upload + run + read back 5.9 ms, finish 0.9 ms
+
+JSON {"gpu":"apple metal-3","contracts":4738,"runs":20,"ua":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36","bs":{"compute":{"median":0.3499999940395355,"min":0.2999999523162842,"max":0.699999988079071,"p25":0.30000001192092896,"p75":0.5},"computeRead":{"median":0.6000000238418579,"min":0.5,"max":0.800000011920929,"p25":0.5999999642372131,"p75":0.6000000238418579},"e2e":{"median":39.25,"min":35.40000003576279,"max":148.39999997615814,"p25":38.60000002384186,"p75":41.40000003576279},"parts":{"build":35.5,"compile":1.4000000059604645,"run":1.800000011920929,"finish":0.10000002384185791}},"merton":{"compute":{"median":1.600000023841858,"min":1.399999976158142,"max":3.399999976158142,"p25":1.5999999642372131,"p75":1.699999988079071},"computeRead":{"median":2.8499999940395355,"min":1.5,"max":5.300000011920929,"p25":2.099999964237213,"p75":4.199999988079071},"e2e":{"median":61.25,"min":59.89999997615814,"max":425.5999999642372,"p25":60.89999997615814,"p75":67.80000001192093},"parts":{"build":56.150000005960464,"compile":1.399999976158142,"run":3.199999988079071,"finish":0.40000003576278687}},"both":{"compute":{"median":1.5499999821186066,"min":0.3999999761581421,"max":1.9000000357627869,"p25":0.800000011920929,"p75":1.699999988079071},"computeRead":{"median":0.6000000238418579,"min":0.5,"max":1.0999999642372131,"p25":0.5,"p75":0.9000000357627869},"e2e":{"median":191.2000000178814,"min":96.60000002384186,"max":431.7000000476837,"p25":101.20000004768372,"p75":351.5999999642372},"parts":{"build":166.55000001192093,"compile":2.050000011920929,"run":5.9000000059604645,"finish":0.949999988079071}}}
