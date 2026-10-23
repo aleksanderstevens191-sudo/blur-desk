@@ -9,19 +9,38 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
-from chain import load, apply_filters, parity_forwards, european_ivs, early_exercise, FILTERS
+from chain import load, apply_filters, american_forwards, european_ivs, early_exercise, FILTERS
 
 path = Path(sys.argv[1])
 t_start = time.time()
 meta, rows = load(path)
 exps = sorted({r["expiry"] for r in rows})
 print(f"SPY option chain snapshot {path}")
-print(f"  source      {meta.get('label', meta.get('source', '?')).replace('_', ' ')}")
-print(f"  timestamp   {meta['t0']:%Y-%m-%d %H:%M %Z} (source stamp {meta.get('source_stamp', 'n/a')})")
+print(f"  source      {meta['label']}")
+print(f"  quotes at   {meta['t0']:%Y-%m-%d %H:%M:%S %Z}" + (f"  (fetched {meta['fetched']})" if "fetched" in meta else
+                                                        "  (no time recorded; taken as the close)"))
 print(f"  spot        {meta['spot']:.2f}")
 print(f"  contracts   {len(rows)}: {sum(r['cp'] == 'call' for r in rows)} calls, "
       f"{sum(r['cp'] == 'put' for r in rows)} puts, {len(exps)} expiries ({exps[0]} to {exps[-1]}), "
       f"{len({r['K'] for r in rows})} distinct strikes")
+
+yahoo = path.parent / "yahoo_raw.csv"
+if yahoo.exists():                                    # second source, same moment: do the quotes agree?
+    import csv
+    ours = {(str(r["expiry"]), r["K"], r["cp"]): r for r in rows}
+    same = diff = 0
+    gaps = []
+    for q in csv.DictReader(open(yahoo)):
+        r = ours.get((q["expiry"], float(q["strike"]), q["type"]))
+        if r is None or r["bid"] is None or not float(q["ask"] or 0) > 0 or not (r["ask"] or 0) > 0:
+            continue
+        m_y = 0.5 * (float(q["bid"]) + float(q["ask"]))
+        m_c = 0.5 * (r["bid"] + r["ask"])
+        gaps.append(abs(m_y - m_c) / max(0.5 * (r["ask"] - r["bid"]), 0.005))
+        same += abs(m_y - m_c) < 0.005
+    g = np.array(gaps)
+    print(f"  cross-check yahoo_raw.csv (fetched the same minute): {len(g)} two-sided contracts in both; mids equal "
+          f"on {same}, median gap {np.median(g):.2f} half-spreads, {np.mean(g > 1):.1%} differ by more than a half-spread")
 print()
 
 kept, report = apply_filters(meta, rows)
@@ -36,15 +55,25 @@ print()
 
 # parity may fall back on two-sided quotes the volume filter dropped (a far expiry can trade nothing all day)
 two_sided = [r for r in rows if not any(bad(r, meta) for name, bad in FILTERS[:3])]
-fwd, curve_day = parity_forwards(meta, kept, fallback_rows=two_sided)
+t0 = time.time()
+# Forwards use every two-sided quote: parity needs a clean call and put at the same strike, not
+# volume, and the far expiries trade only a handful of strikes a day.
+fwd, curve_day, hist = american_forwards(meta, two_sided, two_sided)
+plain = hist[0]
 print(f"Spot implied by the options (D F of expiries with no ex-dividend date before them): "
       f"{meta['spot_implied']:.2f} vs quoted {meta['spot']:.2f}")
 print(f"Forwards from put-call parity, discounting on the US Treasury curve of {curve_day} (no dividend yield assumed)")
-print("  F: median of K + (C - P)/D over the 6 strikes nearest the money. spread: max - min of those 6.")
-print("  noise: the quotes' own half-spread on C - P, in dollars of F. PV divs: implied spot - D F; each: per")
-print("  quarterly ex-date (3rd Friday of Mar/Jun/Sep/Dec, SPY's schedule). q: the same carry as a flat yield.")
-print(f"  {'expiry':10s} {'days':>6s} {'kept':>5s} {'r':>6s} {'F':>9s} {'spread':>7s} {'noise':>6s} "
-      f"{'PV divs':>8s} {'ex':>3s} {'each':>6s} {'q':>7s} {'box r':>7s}")
+print("  F plain: median of K + (C - P)/D over the 6 strikes nearest the money, raw mids (American prices), using")
+print("  every two-sided quote (parity needs a call and a put at one strike, not volume).")
+print(f"  F adj: the same after subtracting each option's early-exercise premium, iterated to a fixed point "
+      f"({len(hist) - 1} passes, {time.time() - t0:.0f} s).")
+print("  spread: max - min of the 6 strike estimates, plain then adj. noise: the quotes' half-spread on C - P, in dollars of F.")
+print("  PV divs: implied spot - D F (adj); each: per quarterly ex-date (3rd Friday of Mar/Jun/Sep/Dec, SPY's")
+print("  schedule). q: the same carry as a flat yield. box r: rate implied by regressing C - P on K within 5% of")
+print("  F, plain mids then premium-adjusted (Treasury r for comparison).")
+print(f"  {'expiry':10s} {'days':>6s} {'kept':>5s} {'r':>6s} {'F plain':>9s} {'F adj':>9s} {'spread plain':>12s} {'adj':>5s} {'noise':>6s} "
+      f"{'PV divs':>8s} {'ex':>3s} {'each':>6s} {'q':>7s} {'box r plain':>11s} {'adj':>7s}")
+pct = lambda x: f"{x:7.2%}" if x is not None else "      -"
 for exp in exps:
     s = fwd.get(exp)
     n = sum(r["expiry"] == exp for r in kept)
@@ -54,12 +83,10 @@ for exp in exps:
         print(f"  {exp}  {s['T'] * 365:6.2f} {n:5d}  skipped: {s['why']}")
         continue
     each = f"{s['div_each']:6.2f}" if s["div_each"] is not None else "     -"
-    box = f"{s['box_rate']:7.2%}" if s["box_rate"] is not None else "      -"
-    note = "" if s["source"] == "filtered" else "  *"
-    print(f"  {exp} {s['T'] * 365:6.2f} {n:5d} {s['r']:6.2%} {s['F']:9.2f} {s['spread']:7.2f} {s['noise']:6.2f} "
-          f"{s['pv_div']:8.2f} {len(s['ex_dates']):3d} {each} {s['q']:7.2%} {box}{note}")
-if any(s.get("source", "filtered") != "filtered" for s in fwd.values()):
-    print("  * not enough traded pairs; forward from two-sided quotes that had no volume")
+    note = ""
+    print(f"  {exp} {s['T'] * 365:6.2f} {n:5d} {s['r']:6.2%} {plain[exp][0]:9.2f} {s['F']:9.2f} {plain[exp][2]:12.2f} {s['spread']:5.2f} "
+          f"{s['noise']:6.2f} {s['pv_div']:8.2f} {len(s['ex_dates']):3d} {each} {s['q']:7.2%}     "
+          f"{pct(plain[exp][1])} {pct(s['box_rate'])}{note}")
 print()
 
 european_ivs(kept, fwd)
@@ -102,12 +129,12 @@ def stats(group, label):
     h = np.array([r["half"] for r in group])
     v = np.array([r["eep_volpts"] for r in group])
     v = v[np.isfinite(v)]
-    vp = f"{np.median(v):7.3f} {v.max():7.2f}" if len(v) else f"{'-':>7s} {'-':>7s}"
+    vp = f"{np.median(v):7.3f} {np.percentile(v, 95):7.2f}" if len(v) else f"{'-':>7s} {'-':>7s}"
     print(f"  {label:26s} {len(group):6d} {np.median(e):8.3f} {e.max():8.3f} {np.median(e / h):7.2f} "
           f"{np.mean(e > h):7.0%} {vp} {len(group) - len(v):6d}")
 
 
-print(f"  {'':26s} {'n':>6s} {'med $':>8s} {'max $':>8s} {'med/hs':>7s} {'>hs':>7s} {'med vp':>7s} {'max vp':>7s} {'no vol':>6s}")
+print(f"  {'':26s} {'n':>6s} {'med $':>8s} {'max $':>8s} {'med/hs':>7s} {'>hs':>7s} {'med vp':>7s} {'p95 vp':>7s} {'no vol':>6s}")
 for cp in ("call", "put"):
     for b in ("OTM (> 2%)", "ATM (within 2%)", "ITM 2-10%", "ITM > 10%"):
         stats([r for r in priced if r["cp"] == cp and bucket(r) == b], f"{cp}s {b}")
@@ -125,4 +152,22 @@ print(f"Summary: {sum(r['eep'] > r['half'] for r in priced)} of {len(priced)} co
 print(f"  out of the money and at the money: {sum(r['eep'] > r['half'] for r in otm)} of {len(otm)}. "
       "Pricing from here on is European on parity forwards; the European model is")
 print("  reported on every contract, and the comparisons that matter (smile, fits) use the OTM side.")
-print(f"\ntotal time {time.time() - t_start:.0f} s")
+
+# Hand-off to the GPU stages: forwards and every contract that survived the filters.
+import json
+out = path.parent / "stage1.json"
+json.dump({
+    "source": meta["label"], "quote_time": meta["t0"].isoformat(), "spot": meta["spot"],
+    "spot_implied": meta["spot_implied"], "curve": curve_day,
+    "expiries": [{"expiry": str(e), "T": s["T"], "r": s["r"], "D": float(s["D"]), "F": s["F"],
+                  "F_plain": plain[e][0], "S": float(s["S"]), "pv_div": float(s["pv_div"]),
+                  "div_each": s["div_each"], "spread": s["spread"]}
+                 for e, s in sorted(fwd.items()) if s["F"] is not None],
+    "contracts": [{"expiry": str(r["expiry"]), "K": r["K"], "cp": r["cp"], "bid": r["bid"], "ask": r["ask"],
+                   "volume": r["volume"], "iv": r["iv"] if np.isfinite(r["iv"]) else None,
+                   "eep": r.get("eep"), "iv_true": (r.get("iv_true") if np.isfinite(r.get("iv_true", np.nan))
+                                                    else None)}
+                  for r in kept if fwd.get(r["expiry"]) and fwd[r["expiry"]]["F"] is not None],
+}, open(out, "w"), separators=(",", ":"))
+print(f"\nwrote {out}: {len(fwd)} expiries, forwards, and the {len(kept)} filtered contracts with vols and premiums")
+print(f"total time {time.time() - t_start:.0f} s")

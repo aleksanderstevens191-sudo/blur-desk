@@ -1,9 +1,10 @@
 """The full SPY chain: load a snapshot, filter it, and read each expiry's forward from put-call parity.
 
 Snapshot format (reference/fetch_spy_chain_full.py writes it): a header comment
-"# spot=... asof=YYYY-MM-DD fetched=<ISO time> source=... contracts=..." and the
-columns expiry,strike,type,bid,ask[,bid_size,ask_size,last,volume,open_interest,
-last_trade_utc,vendor_iv]. The older two-expiry file (bid/ask only, no time)
+"# spot=... asof=YYYY-MM-DD fetched=<ISO> quote_time=<ISO> source=... contracts=..."
+and the columns expiry,strike,type,bid,ask[,bid_size,ask_size,last,volume,
+open_interest,last_trade,vendor_iv]. Time zero is quote_time (the delayed quotes'
+own moment), else fetched. The older two-expiry file (bid/ask only, no time)
 loads too; its quotes are taken as of the 16:00 ET close.
 
 Time to expiry is measured in calendar time from the snapshot to 16:00 ET on the
@@ -67,9 +68,11 @@ def load(path):
                 if v:
                     meta[k] = v
     meta["spot"] = float(meta["spot"])
+    meta["label"] = meta.get("label", meta.get("source", "?")).replace("_", " ")
     meta["asof"] = dt.date.fromisoformat(meta["asof"])
-    if "fetched" in meta:
-        meta["t0"] = dt.datetime.fromisoformat(meta["fetched"]).astimezone(ET)
+    stamp = meta.get("quote_time") or meta.get("fetched")          # delayed feeds: the quotes' own time
+    if stamp:
+        meta["t0"] = dt.datetime.fromisoformat(stamp).astimezone(ET)
     else:
         meta["t0"] = dt.datetime.combine(meta["asof"], dt.time(16, 0), ET)
     rows = []
@@ -120,14 +123,15 @@ def third_fridays(start, end):
     return out
 
 
-def parity_forwards(meta, rows, fallback_rows=None, n_near=6):
+def parity_forwards(meta, rows, fallback_rows=None, n_near=6, eep=None):
     """Per expiry: T, r, D, forward F from parity, its dispersion, dividends implied.
 
     F = median over the n_near strikes with the smallest |C - P| of K + (C - P)/D, using
-    mids. Near the money both options carry almost no early-exercise premium, so
-    American parity is as close to European as it gets there. If fewer than 2 strikes
-    have both a call and a put in rows, fallback_rows (two-sided quotes before the
-    volume filter) are used. Returns a dict expiry -> slice info.
+    mids. eep: optional {(expiry, K, cp): early-exercise premium} subtracted from each mid
+    first, so parity holds for European-equivalent prices (see american_forwards). If fewer
+    than 2 strikes have both a call and a put in rows, fallback_rows (two-sided quotes
+    before the volume filter) are used. Also: box_rate, the rate implied by regressing
+    C - P on K within 5% of F (a box spread). Returns a dict expiry -> slice info.
     """
     day, rate = curve_for(meta["asof"])
     S0, t0 = meta["spot"], meta["t0"]
@@ -137,9 +141,9 @@ def parity_forwards(meta, rows, fallback_rows=None, n_near=6):
         r = rate(T * 365)
         D = np.exp(-r * T)
         used = "filtered"
-        pairs = _pairs(rows, exp)
+        pairs = _pairs(rows, exp, eep)
         if len(pairs) < 2 and fallback_rows is not None:
-            pairs, used = _pairs(fallback_rows, exp), "two-sided quotes incl. no-volume"
+            pairs, used = _pairs(fallback_rows, exp, eep), "two-sided quotes incl. no-volume"
         if len(pairs) < 2:
             out[exp] = dict(T=T, r=r, D=D, F=None, why="fewer than 2 strikes with a call and a put")
             continue
@@ -178,10 +182,11 @@ def parity_forwards(meta, rows, fallback_rows=None, n_near=6):
     return out, day
 
 
-def _pairs(rows, exp):
+def _pairs(rows, exp, eep=None):
     c = {r["K"]: r for r in rows if r["expiry"] == exp and r["cp"] == "call"}
     p = {r["K"]: r for r in rows if r["expiry"] == exp and r["cp"] == "put"}
-    mid = lambda q: 0.5 * (q["bid"] + q["ask"])
+    eep = eep or {}
+    mid = lambda q: 0.5 * (q["bid"] + q["ask"]) - eep.get((q["expiry"], q["K"], q["cp"]), 0.0)
     return [(K, mid(c[K]), mid(p[K]), 0.25 * (c[K]["ask"] - c[K]["bid"] + p[K]["ask"] - p[K]["bid"]))
             for K in sorted(set(c) & set(p))]
 
@@ -248,3 +253,31 @@ def early_exercise(meta, rows, fwd, t_grid=200, x_grid=400):
             r["iv_true"] = iv_eu
             r["eep_volpts"] = 100 * (r["iv"] - iv_eu)
     return rows
+
+
+def american_forwards(meta, rows, fallback_rows, band=0.05, iters=5, tol=0.005):
+    """Parity forwards that account for early exercise.
+
+    American parity is not European parity: an in-the-money put (high rates) or a call
+    before an ex-date can be worth more alive-or-exercised than its European twin, and
+    that premium leaks into C - P. Start from plain parity, price the early-exercise
+    premium of every two-sided contract within `band` of the forward (early_exercise,
+    with dividends and spot from that forward), subtract it, refit parity, and repeat
+    until no forward moves by more than tol dollars. Returns (fwd, curve day, history)
+    where history[i] is {expiry: (F, box_rate, spread)} after pass i (pass 0 = plain parity).
+    """
+    fwd, day = parity_forwards(meta, rows, fallback_rows)
+    hist = [{e: (s["F"], s["box_rate"], s.get("spread")) for e, s in fwd.items()}]
+    for _ in range(iters):
+        near = [dict(r) for r in fallback_rows if fwd.get(r["expiry"]) and fwd[r["expiry"]]["F"]
+                and abs(np.log(r["K"] / fwd[r["expiry"]]["F"])) < band]
+        european_ivs(near, fwd)
+        early_exercise(meta, near, fwd)
+        eep = {(r["expiry"], r["K"], r["cp"]): r.get("eep", 0.0) for r in near}
+        new, _ = parity_forwards(meta, rows, fallback_rows, eep=eep)
+        moved = max(abs(new[e]["F"] - fwd[e]["F"]) for e in new if new[e]["F"] is not None)
+        fwd = new
+        hist.append({e: (s["F"], s["box_rate"], s.get("spread")) for e, s in fwd.items()})
+        if moved < tol:
+            break
+    return fwd, day, hist
