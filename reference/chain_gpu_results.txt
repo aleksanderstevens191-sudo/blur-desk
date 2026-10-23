@@ -1,0 +1,21 @@
+# node src/test-chain.mjs (64-bit CPU twin)
+4738 contracts, 32 expiries: 20165 jobs (15427 Merton row nodes, 254.5M + 1.2M taps), built in 786 ms, run in 446 ms
+PASS Black-Scholes, own vol, vs QuantLib: max |js - ref| 8.24e-13 dollars over 4738 contracts (worst 2028-01-21 800 put)
+PASS Merton per expiry vs the Merton series: max |js - ref| 3.06e-12 dollars over 4738 contracts (worst 2028-06-16 840 put)
+PASS Black-Scholes, own vol, vs the market mid: max |js - ref| 8.88e-13 dollars over 4738 contracts (worst 2028-01-21 800 put)
+
+# node src/test-gpu.mjs chain (headless Chromium, SwiftShader software GPU, 32-bit)
+GPU: google swiftshader
+tolerance: |gpu - py| < 0.0001
+
+
+the whole SPY chain in one GPU submit vs QuantLib and the Merton series (src/chain-check.js):
+4738 contracts, 32 expiries, SPY 2026-10-23T14:57:29-04:00: 20165 jobs in one dispatch (15427 Merton strike-row nodes, 254.5M taps; 4738 Black-Scholes kernels, 1.23M taps)
+build 866 ms (CPU, 64-bit), upload + pipeline 164 ms, submit + read back 1549 ms, finish 4 ms. Pass: |gpu - ref| < 0.0001 dollars on every contract.
+PASS Black-Scholes, own implied vol, vs QuantLib: max |gpu - ref| 7.06e-6 dollars (worst 2028-01-21 765 put at 49.2350)
+PASS Black-Scholes, own implied vol, vs the market mid: max |gpu - ref| 7.06e-6 dollars (worst 2028-01-21 765 put at 49.2350)
+PASS Merton fitted per expiry vs the Merton series: max |gpu - ref| 7.19e-6 dollars (worst 2029-01-19 900 call at 54.0369)
+
+all GPU results within 1e-4 of the Python reference
+
+PASS
