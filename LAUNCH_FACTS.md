@@ -19,7 +19,7 @@ Every number for the launch thread, with what it is, where it was measured and w
 | A9 | GPU barriers vs Python, 26 fixtures (weighted, plain, double, step) | worst **1.7e-6** | Mac, 2026-10-24 | `docs/check_mac_2026-10-24.txt` |
 | A10 | The demo's error counter through Alek's screen recording: calls from 5% to 67% vol, expiries of 1 and 0.31 years, and a Merton kernel with −10% jumps | **9.0e-6 to 3.2e-5**, green the whole time (under 1e-4) | Mac, 2026-10-24 | Alek's screen recording (not in the repo) |
 | A6 | JavaScript core vs Python | agree to 11 decimal places | ⚠ cloud | README "Results so far" |
-| A7 | The recording's error counter: zigzag vs its closed form (a sum of calls), through the whole clip | **1.9e-6 to 1.4e-5** | ⚠ cloud (SwiftShader) | PR #9 (2ae40fe) |
+| A7 | The 15-second clip's error counter: the zigzag vs its closed form (a sum of calls) while it is drawn and blurred, then vs the Merton series under the SPY fit | **1.9e-6 to 1.8e-5**, then 1.8e-6, green throughout (cloud: 1.9e-6 to 1.4e-5) | Mac, 2026-10-24 | `docs/blur-desk-15s.mp4` |
 
 ## The American put against the tree
 
@@ -105,11 +105,10 @@ Inputs: the SPY Merton fit (S2) and the last price $763.96. A 10% fall means bel
 
 On the Dec 18 panel the market-implied density peaks near $785. It sits above the forward because a fat left tail pulls the mean down. These are risk-neutral odds, which include the price of bearing the risk, so they are not a forecast.
 
-Panel 13 on blur-desk.vercel.app showed the same Dec 18 read-offs on the Mac (7.6%, 2.9%, 3.0%, sums to 1.0000, mean $768.11 = forward $768.11), in 37 ms.
+Panel 13 on blur-desk.vercel.app showed the same Dec 18 read-offs on the Mac (7.6%, 2.9%, 3.0%, sums to 1.0000, mean $768.11 = forward $768.11), in 37 ms, and in 17 ms in the clip.
 
 ## Still to measure on the Mac
 
-1. A run of `/?record=1` for the 15-second clip. Alek's screen recording of 2026-10-24 is of the normal page.
-2. QuantLib barriers on all cores, if you want a barrier ratio against all cores (Q3).
+1. QuantLib barriers on all cores, if you want a barrier ratio against all cores (Q3).
 
-Done on 2026-10-24: `/check.html?only=fixtures` (A8, A9, B4) and `/check.html?only=odds` (O1–O8), both all PASS, and the demo's top bar and error counter (A2, A10, C7, C10) from Alek's screen recording.
+Done on 2026-10-24: `/check.html?only=fixtures` (A8, A9, B4) and `/check.html?only=odds` (O1–O8), both all PASS, the demo's top bar and error counter (A2, A10, C7, C10) from Alek's screen recording, and the 15-second clip from `/?record=1` (A7, `docs/blur-desk-15s.mp4`).
