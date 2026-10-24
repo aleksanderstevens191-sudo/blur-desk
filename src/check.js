@@ -8,13 +8,14 @@ import { fftChecks } from "./fft-check.js";
 import { kernelChecks } from "./kernel-check.js";
 import { chainChecks } from "./chain-check.js";
 import { oddsChecks } from "./odds-check.js";
+import { twoStockChecks } from "./check-2d.js";
 import SPY from "./spy_fit.json";
 
 const TOL = 1e-4;
 const out = document.getElementById("out");
 const log = (line = "") => (out.textContent += line + "\n");
 // /check.html?only=fft runs just the FFT section, ?only=kernels the fat-tailed kernels,
-// ?only=chain the full SPY chain, ?only=odds the market's odds
+// ?only=chain the full SPY chain, ?only=odds the market's odds, ?only=2d the two-stock blur
 const only = new URLSearchParams(location.search).get("only");
 const run = (section) => !only || only === section;
 
@@ -90,6 +91,10 @@ async function main() {
   if (run("odds")) {
     log("\nthe market's odds: the SPY fit's distribution, edge-detected from GPU prices (src/odds-check.js):");
     fails += await oddsChecks(log, SPY);
+  }
+  if (run("2d")) {
+    log("\ntwo-stock options, 2D blur on the GPU (direct and FFT) vs Python (reference/make_2d_fixtures.py):");
+    fails += await twoStockChecks(log, TOL);
   }
   log(fails ? `\n${fails} failed` : `\nall GPU results within 1e-4 of the Python reference${run("fft") ? ", FFT within 1e-4 of direct" : ""}`);
   document.title = fails ? "FAIL" : "PASS";
