@@ -14,7 +14,9 @@ Every number for the launch thread, with what it is, where it was measured and w
 | A2 | The demo's live error counter, call, vs Black-Scholes | within **1.4e-5** at 54.7 ms per reprice | Mac | Alek's report in chat, 2026-10-22. It is not in the repo, so rerun it before quoting |
 | A3 | The demo's calls and puts vs Black-Scholes from T = 0.01 to 2 years and σ from 5% to 80% | within **1e-5** | ⚠ cloud (SwiftShader) | README "Notes on accuracy" |
 | A4 | CPU reference, 20 Black-Scholes calls (T from 0.1 to 2, K from 80 to 120) | **$0.000013** max | ⚠ cloud (numpy, 64-bit) | `reference/results.txt` (75f9808) |
-| A5 | GPU vs the Python reference, every fixture on `/check.html` | all under **1e-4** | Mac and cloud | `reference/kernel_gpu_results.txt`, `reference/chain_check_mac.txt` |
+| A5 | GPU vs the Python reference, every fixture on `/check.html` | all under **1e-4** | Mac and cloud | `reference/kernel_gpu_results.txt`, `reference/chain_check_mac.txt`, `docs/check_mac_2026-10-24.txt` |
+| A8 | GPU European calls vs Python, 3 fixtures, current main | **2.1e-7 to 1.4e-6** | Mac, 2026-10-24 | `docs/check_mac_2026-10-24.txt` |
+| A9 | GPU barriers vs Python, 26 fixtures (weighted, plain, double, step) | worst **1.7e-6** | Mac, 2026-10-24 | `docs/check_mac_2026-10-24.txt` |
 | A6 | JavaScript core vs Python | agree to 11 decimal places | ⚠ cloud | README "Results so far" |
 | A7 | The recording's error counter: zigzag vs its closed form (a sum of calls), through the whole clip | **1.9e-6 to 1.4e-5** | ⚠ cloud (SwiftShader) | PR #9 (2ae40fe) |
 
@@ -25,9 +27,9 @@ Every number for the launch thread, with what it is, where it was measured and w
 | B1 | American put (S = K = 100, σ = 20%, r = 5%, 1 year): blur with Richardson vs a 20,000-step binomial tree | 6.090368 vs 6.090333, **$0.000035** apart | ⚠ cloud (numpy) | `reference/results.txt` (75f9808) |
 | B2 | Early-exercise premium in that case | $0.5168 | ⚠ cloud | `reference/results.txt` |
 | B3 | GPU American put vs Python, before blocked summation | 4.97e-5 | Mac | commit 4e0f3f3 message, README |
-| B4 | GPU American put vs Python, after blocked summation | 6.3e-6 in an f32 emulation, which SwiftShader reproduces | ⚠ **not rerun on the Mac** | commit 4e0f3f3 |
+| B4 | GPU American put vs Python, after blocked summation (200 steps) | **6.34e-6** (6.087394 vs 6.087400), 30 ms | Mac, 2026-10-24 | `docs/check_mac_2026-10-24.txt` |
 
-B4 is the current code. Running `/check.html?only=fixtures` on the Mac gives the number to quote.
+B4 is the current code. It matches the 6.3e-6 the f32 emulation predicted in 4e0f3f3, so blocked summation fixed what fast-math broke (B3 → B4: 8x closer).
 
 ## GPU speed
 
@@ -90,18 +92,20 @@ Inputs: the SPY Merton fit (S2) and the last price $763.96. A 10% fall means bel
 
 | # | What | Nov 20 | Dec 18 | Machine | Source |
 | --- | --- | ---: | ---: | --- | --- |
-| O1 | Market-implied P(SPY falls more than 10%) | **4.3%** | **7.6%** | ⚠ cloud (CPU and SwiftShader) | `src/odds.js`, `node src/test-odds.mjs` (4e80f9e) |
-| O2 | The same from one flat vol (14.6%) | 0.4% | 2.9% | ⚠ cloud | same |
-| O3 | P(rises more than 10%) | 0.2% | 3.0% | ⚠ cloud | same |
-| O4 | Distribution sums to | 1.000000 | 1.000000 | ⚠ cloud | `/check.html?only=odds` |
-| O5 | Mean vs the parity forward | $768.18 = $768.18 | $768.11 = $768.11 | ⚠ cloud | same |
-| O6 | Tail odds vs Merton's closed-form CDF (GPU) | 5e-8 | 1e-6 | ⚠ cloud (SwiftShader) | same |
+| O1 | Market-implied P(SPY falls more than 10%) | **4.3%** (4.287%) | **7.6%** (7.615%) | Mac, 2026-10-24 (cloud agrees) | `docs/check_mac_2026-10-24.txt`, `src/odds.js` (4e80f9e) |
+| O2 | The same from one flat vol (14.6%) | 0.4% | 2.9% | Mac | same |
+| O3 | P(rises more than 10%) | 0.2% | 3.0% | Mac | same |
+| O4 | Distribution sums to | 1.000000 | 1.000000 | Mac | same |
+| O5 | Mean vs the parity forward | $768.18 = $768.18 | $768.11 = $768.11 | Mac | same |
+| O6 | Tail odds vs Merton's closed-form CDF (GPU) | 2.5e-8 | 1.2e-6 | Mac | same |
+| O7 | GPU CDF at every strike vs the same blur in 64-bit | 5.8e-6 | 7.5e-6 | Mac | same |
+| O8 | GPU time for the distribution (2 rows, every strike) | 60 ms (5,237 strikes) | 16 ms (4,071 strikes) | Mac | same |
 
-On the Dec 18 panel the market-implied density peaks near $785. It sits above the forward because a fat left tail pulls the mean down. These are risk-neutral odds, which include the price of bearing the risk, so they are not a forecast. To get the Mac numbers, open `/check.html?only=odds` on the Mac.
+On the Dec 18 panel the market-implied density peaks near $785. It sits above the forward because a fat left tail pulls the mean down. These are risk-neutral odds, which include the price of bearing the risk, so they are not a forecast.
 
 ## Still to measure on the Mac
 
-1. `/check.html?only=fixtures`: the American put after blocked summation (B4).
-2. `/check.html?only=odds`: the market odds (O1–O6).
-3. The demo's error counter and reprice time on current main (A2, C7), plus a run of `/?record=1`.
-4. QuantLib barriers on all cores, if you want a barrier ratio against all cores (Q3).
+1. The demo's error counter and reprice time on current main (A2, C7), plus a run of `/?record=1`.
+2. QuantLib barriers on all cores, if you want a barrier ratio against all cores (Q3).
+
+Done on 2026-10-24: `/check.html?only=fixtures` (A8, A9, B4) and `/check.html?only=odds` (O1–O8), both all PASS.

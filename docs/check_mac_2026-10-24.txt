@@ -1,0 +1,69 @@
+# /check.html?only=fixtures and /check.html?only=odds on Alek's Mac (Chrome, apple metal-3), 2026-10-24,
+# against main 39fbaca (https://blur-desk.vercel.app). Pasted by Alek in the launch thread.
+
+==== /check.html?only=fixtures ====
+GPU: apple metal-3
+tolerance: |gpu - py| < 0.0001
+
+PASS euro_call    K=95 T=0.25 sigma=0.2  gpu=7.71437600  py=7.71437579  |gpu-py|=2.05e-7  (6.1 ms)
+PASS euro_call    K=100 T=1 sigma=0.2  gpu=10.45056666  py=10.45056794  |gpu-py|=1.28e-6  (4.0 ms)
+PASS euro_call    K=110 T=0.5 sigma=0.35  gpu=6.97166896  py=6.97167036  |gpu-py|=1.40e-6  (3.9 ms)
+PASS american_put K=100 T=1 sigma=0.2 steps=200  gpu=6.08739376  py=6.08740010  |gpu-py|=6.34e-6  (30.3 ms)
+
+barriers (reference/make_barrier_fixtures.py):
+PASS weighted down-and-out call        gpu=8.66547100 py=8.66547166  |gpu-py|=6.61e-7  (95.3 ms)
+PASS weighted down-and-in call         gpu=1.78511203 py=1.78511191  |gpu-py|=1.11e-7  (4.7 ms)
+PASS weighted up-and-out call          gpu=0.48148000 py=0.48147996  |gpu-py|=3.71e-8  (3.9 ms)
+PASS weighted up-and-in call           gpu=9.96910387 py=9.96910361  |gpu-py|=2.58e-7  (4.2 ms)
+PASS weighted down-and-out put         gpu=0.15122032 py=0.15122038  |gpu-py|=5.71e-8  (3.7 ms)
+PASS weighted down-and-in put          gpu=5.42230589 py=5.42230565  |gpu-py|=2.46e-7  (3.7 ms)
+PASS weighted up-and-out put           gpu=6.87301296 py=6.87301317  |gpu-py|=2.08e-7  (3.6 ms)
+PASS weighted up-and-in put            gpu=1.02742858 py=1.02742864  |gpu-py|=5.95e-8  (3.9 ms)
+PASS weighted down-and-out call        gpu=8.33984287 py=8.33984157  |gpu-py|=1.30e-6  (3.7 ms)
+PASS weighted down-and-in call         gpu=2.04829932 py=2.04829944  |gpu-py|=1.23e-7  (4.4 ms)
+PASS weighted up-and-out call          gpu=0.41339130 py=0.41339127  |gpu-py|=3.12e-8  (3.7 ms)
+PASS weighted up-and-in call           gpu=9.97474955 py=9.97474973  |gpu-py|=1.85e-7  (4.0 ms)
+PASS weighted down-and-out put         gpu=0.13404506 py=0.13404506  |gpu-py|=1.12e-10  (3.5 ms)
+PASS weighted down-and-in put          gpu=6.33303984 py=6.33303987  |gpu-py|=2.33e-8  (4.0 ms)
+PASS weighted up-and-out put           gpu=7.63024981 py=7.63024958  |gpu-py|=2.24e-7  (3.6 ms)
+PASS weighted up-and-in put            gpu=1.30274341 py=1.30274313  |gpu-py|=2.72e-7  (4.2 ms)
+PASS plain    down-and-out call        gpu=9.29363629 py=9.29363803  |gpu-py|=1.74e-6  (3.4 ms)
+PASS plain    up-and-out put           gpu=6.38580471 py=6.38580566  |gpu-py|=9.43e-7  (3.6 ms)
+PASS double   double-knock-out call    gpu=0.01493740 py=0.01493737  |gpu-py|=2.79e-8  (4.8 ms)
+PASS double   double-knock-out put     gpu=2.11033532 py=2.11033544  |gpu-py|=1.16e-7  (4.2 ms)
+PASS double   double-knock-out call    gpu=0.13034302 py=0.13034298  |gpu-py|=4.05e-8  (5.1 ms)
+PASS double   double-knock-out call    images=2 gpu=0.04643399 py=0.04643393  |gpu-py|=6.59e-8  (4.0 ms)
+PASS step     up call N=50             out=1.512705 in=8.937880  |gpu-py|=1.06e-6  (65.1 ms)
+PASS step     up call N=50 shifted     out=1.151548 in=9.299037  |gpu-py|=1.63e-6  (11.9 ms)
+PASS step     down put N=24 shifted    out=0.136157 in=5.437367  |gpu-py|=1.50e-6  (7.4 ms)
+PASS step     down call N=24           out=9.365835 in=1.084749  |gpu-py|=1.26e-7  (9.2 ms)
+
+all GPU results within 1e-4 of the Python reference
+
+==== /check.html?only=odds ====
+GPU: apple metal-3
+tolerance: |gpu - py| < 0.0001
+
+the market's odds: the SPY fit's distribution, edge-detected from GPU prices (src/odds-check.js):
+SPY 2026-10-22, last $763.96; Merton fit sigma 0.0957, 1.671 jumps/yr, mean jump -0.0946, jump sd 0.0498 (spy_fit.json).
+One call row + one put row blurred on the GPU (32-bit), every strike read off them, out to 7 sd past the kernel's widest jump term; P(S_T <= K) = 1 + e^rT dC/dK.
+
+2026-11-20 (T 0.0795, r 4.11%): 5237 strikes $131 to $4493, 7049 taps (60 ms)
+PASS sums to 1.000000 (|sum - 1| 1.1e-12 < 1e-3)
+PASS mean $768.1797 vs parity forward $768.1797: +$7.3e-10 (< $0.01)
+PASS P(SPY < $687.56, down 10%) 4.287% vs Merton closed form 4.287%: |diff| 2.5e-8
+PASS P(SPY > $840.36, up 10%) 0.175% vs Merton closed form 0.175%: |diff| 1.6e-6
+PASS smallest probability at a strike -3.0e-12 (> -1e-4)
+PASS CDF at every strike vs the same blur in 64-bit on the CPU: max |diff| 5.8e-6
+     flat vol 14.58% for comparison: down 10% 0.370%, up 10% 1.368%
+
+2026-12-18 (T 0.1562, r 4.15%): 4071 strikes $112 to $5265, 5783 taps (16 ms)
+PASS sums to 1.000000 (|sum - 1| 4.9e-13 < 1e-3)
+PASS mean $768.1101 vs parity forward $768.1101: -$3.2e-10 (< $0.01)
+PASS P(SPY < $687.56, down 10%) 7.615% vs Merton closed form 7.615%: |diff| 1.2e-6
+PASS P(SPY > $840.36, up 10%) 2.989% vs Merton closed form 2.988%: |diff| 1.2e-5
+PASS smallest probability at a strike -2.5e-12 (> -1e-4)
+PASS CDF at every strike vs the same blur in 64-bit on the CPU: max |diff| 7.5e-6
+     flat vol 14.58% for comparison: down 10% 2.908%, up 10% 5.598%
+
+all GPU results within 1e-4 of the Python reference
