@@ -12,6 +12,8 @@ An option's price is its payoff, blurred. Blurring an image and pricing an optio
 - **Crashes and the smile:** swap the Gaussian for a kernel with fat tails (Merton jumps, variance gamma) and the same blur prices a market that can jump. Read the prices back as Black-Scholes vols and out comes the volatility smile, fitted here to real SPY options.
 - **The market's odds:** run the edge-detect kernel `[1, -2, 1]` across a row of call prices and out comes the probability distribution the market is pricing (Breeden–Litzenberger, 1978).
 
+**Try it:** https://blur-desk.vercel.app · **Watch:** [the 15-second clip](docs/blur-desk-15s.mp4), recorded on a Mac with `/?record=1`
+
 ## Results so far (CPU reference)
 
 All numbers come from `reference/check.py`; full output is in `reference/results.txt`.
