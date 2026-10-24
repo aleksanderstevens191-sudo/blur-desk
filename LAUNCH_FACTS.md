@@ -11,12 +11,13 @@ Every number for the launch thread, with what it is, where it was measured and w
 | # | What | Value | Machine | Source |
 | --- | --- | --- | --- | --- |
 | A1 | Gaussian blur on the GPU vs the Black-Scholes formula, 14 strikes from 70 to 140 | **1.30e-5** max | Mac | `reference/kernel_gpu_results.txt` (3b98d65) |
-| A2 | The demo's live error counter, call, vs Black-Scholes | within **1.4e-5** at 54.7 ms per reprice | Mac | Alek's report in chat, 2026-10-22. It is not in the repo, so rerun it before quoting |
+| A2 | The demo's live error counter, call at 30% vol and 1 year (the page's defaults), vs Black-Scholes | **1.4e-5** | Mac, 2026-10-24 (blur-desk.vercel.app) | `docs/demo_mac_2026-10-24.png`, from Alek's screen recording |
 | A3 | The demo's calls and puts vs Black-Scholes from T = 0.01 to 2 years and σ from 5% to 80% | within **1e-5** | ⚠ cloud (SwiftShader) | README "Notes on accuracy" |
 | A4 | CPU reference, 20 Black-Scholes calls (T from 0.1 to 2, K from 80 to 120) | **$0.000013** max | ⚠ cloud (numpy, 64-bit) | `reference/results.txt` (75f9808) |
 | A5 | GPU vs the Python reference, every fixture on `/check.html` | all under **1e-4** | Mac and cloud | `reference/kernel_gpu_results.txt`, `reference/chain_check_mac.txt`, `docs/check_mac_2026-10-24.txt` |
 | A8 | GPU European calls vs Python, 3 fixtures, current main | **2.1e-7 to 1.4e-6** | Mac, 2026-10-24 | `docs/check_mac_2026-10-24.txt` |
 | A9 | GPU barriers vs Python, 26 fixtures (weighted, plain, double, step) | worst **1.7e-6** | Mac, 2026-10-24 | `docs/check_mac_2026-10-24.txt` |
+| A10 | The demo's error counter through Alek's screen recording: calls from 5% to 67% vol, expiries of 1 and 0.31 years, and a Merton kernel with −10% jumps | **9.0e-6 to 3.2e-5**, green the whole time (under 1e-4) | Mac, 2026-10-24 | Alek's screen recording (not in the repo) |
 | A6 | JavaScript core vs Python | agree to 11 decimal places | ⚠ cloud | README "Results so far" |
 | A7 | The recording's error counter: zigzag vs its closed form (a sum of calls), through the whole clip | **1.9e-6 to 1.4e-5** | ⚠ cloud (SwiftShader) | PR #9 (2ae40fe) |
 
@@ -41,9 +42,10 @@ B4 is the current code. It matches the 6.3e-6 the f32 emulation predicted in 4e0
 | C4 | Whole SPY chain, 4,738 contracts, Black-Scholes at each quote's own vol, GPU compute only | 0.40 ms = **11.8M contracts/sec** | Mac | `reference/chain_bench_results.txt` (a836fd1) |
 | C5 | Whole chain, Merton per expiry, GPU compute only | 1.20 ms = 3.95M/sec | Mac | same |
 | C6 | Whole chain end to end, including the JS kernel build (BS / Merton) | 27.6 ms / 33.3 ms | Mac | same |
-| C7 | Demo reprice of the surface | 54.7 ms | Mac | Alek's report in chat, 2026-10-22 (see A2) |
+| C7 | Demo reprice of the surface (the top bar's ENGINE), call at 30% vol, 1 year | **39.3 ms** (54.7 ms on 2026-10-22) | Mac, 2026-10-24 | `docs/demo_mac_2026-10-24.png` |
 | C8 | numpy CPU baseline, one blur over 10,001 points | **0.97M prices/sec** (10.34 ms) | ⚠ cloud | `reference/results.txt` |
 | C9 | The same blur in plain JavaScript, 1 thread | 38,800 options/sec | Mac | `reference/gpu_barrier_bench_mac.txt` |
+| C10 | The demo's reprice at other settings: 5% vol, 1 year / Merton kernel, 0.31 years | 2.1 ms / 23.8 ms | Mac, 2026-10-24 | Alek's screen recording (not in the repo) |
 
 On the Mac, browser timers tick in 0.1 ms steps, so C1 is good to about 5% and C4 to about 25%.
 
@@ -103,9 +105,11 @@ Inputs: the SPY Merton fit (S2) and the last price $763.96. A 10% fall means bel
 
 On the Dec 18 panel the market-implied density peaks near $785. It sits above the forward because a fat left tail pulls the mean down. These are risk-neutral odds, which include the price of bearing the risk, so they are not a forecast.
 
+Panel 13 on blur-desk.vercel.app showed the same Dec 18 read-offs on the Mac (7.6%, 2.9%, 3.0%, sums to 1.0000, mean $768.11 = forward $768.11), in 37 ms.
+
 ## Still to measure on the Mac
 
-1. The demo's error counter and reprice time on current main (A2, C7), plus a run of `/?record=1`.
+1. A run of `/?record=1` for the 15-second clip. Alek's screen recording of 2026-10-24 is of the normal page.
 2. QuantLib barriers on all cores, if you want a barrier ratio against all cores (Q3).
 
-Done on 2026-10-24: `/check.html?only=fixtures` (A8, A9, B4) and `/check.html?only=odds` (O1–O8), both all PASS.
+Done on 2026-10-24: `/check.html?only=fixtures` (A8, A9, B4) and `/check.html?only=odds` (O1–O8), both all PASS, and the demo's top bar and error counter (A2, A10, C7, C10) from Alek's screen recording.
