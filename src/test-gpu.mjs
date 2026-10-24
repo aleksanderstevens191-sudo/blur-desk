@@ -1,7 +1,7 @@
 // node src/test-gpu.mjs [section] — /check.html in headless Chromium on its software
 // WebGPU adapter (SwiftShader), for machines without a GPU such as CI runners. It runs
 // the same WGSL shaders in 32-bit floats against the same Python fixtures as on a real
-// GPU, only slower. section: fixtures, fft, kernels or chain (default: all four).
+// GPU, only slower. section: fixtures, fft, kernels, chain or odds (default: all five).
 // Needs the built pages (npm run build) and playwright with its Chromium
 // (npm i --no-save playwright && npx playwright install chromium).
 import { preview } from "vite";

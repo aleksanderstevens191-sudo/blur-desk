@@ -7,12 +7,14 @@ import { blurSpec, blurValue, stepSpec, stepValues } from "./barrier-cases.js";
 import { fftChecks } from "./fft-check.js";
 import { kernelChecks } from "./kernel-check.js";
 import { chainChecks } from "./chain-check.js";
+import { oddsChecks } from "./odds-check.js";
+import SPY from "./spy_fit.json";
 
 const TOL = 1e-4;
 const out = document.getElementById("out");
 const log = (line = "") => (out.textContent += line + "\n");
 // /check.html?only=fft runs just the FFT section, ?only=kernels the fat-tailed kernels,
-// ?only=chain the full SPY chain
+// ?only=chain the full SPY chain, ?only=odds the market's odds
 const only = new URLSearchParams(location.search).get("only");
 const run = (section) => !only || only === section;
 
@@ -84,6 +86,10 @@ async function main() {
   if (run("chain")) {
     log("\nthe whole SPY chain in one GPU submit vs QuantLib and the Merton series (src/chain-check.js):");
     fails += await chainChecks(log, TOL);
+  }
+  if (run("odds")) {
+    log("\nthe market's odds: the SPY fit's distribution, edge-detected from GPU prices (src/odds-check.js):");
+    fails += await oddsChecks(log, SPY);
   }
   log(fails ? `\n${fails} failed` : `\nall GPU results within 1e-4 of the Python reference${run("fft") ? ", FFT within 1e-4 of direct" : ""}`);
   document.title = fails ? "FAIL" : "PASS";

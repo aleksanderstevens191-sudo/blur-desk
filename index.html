@@ -87,6 +87,10 @@
       #mirrors { height: 220px; }
       #smile { height: 192px; }
       #chain { height: 300px; }
+      #odds { height: 220px; }
+      .read { position: absolute; left: 10px; top: 20px; max-width: 37%; font-size: 15px; font-weight: 700; line-height: 1.25; letter-spacing: 0.02em; pointer-events: none; }
+      .read b { color: var(--amber); font-variant-numeric: tabular-nums; }
+      .read small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; font-weight: 500; letter-spacing: 0.04em; }
       .sl.jump { grid-template-columns: 112px 1fr; }
       .sl b { color: var(--text); font-weight: 600; }
       .chips button.wide { letter-spacing: 0.04em; }
@@ -117,6 +121,8 @@
         #mirrors { height: 190px; }
         .panel #smile { height: 170px; }
         .panel #chain { height: 260px; }
+        .panel #odds { height: 220px; }
+        .read { position: static; max-width: none; font-size: 13px; }
       }
     </style>
   </head>
@@ -270,6 +276,21 @@
             </div>
             <div class="foot wrap"><span id="fCh1">—</span><span id="fCh2"></span></div>
             <div class="foot wrap"><span id="fCh3">—</span><span id="fCh4"></span></div>
+          </div>
+          <div class="panel full" id="oddsPanel">
+            <h3>13 / MARKET ODDS <em id="odTag">MARKET-IMPLIED (RISK-NEUTRAL)</em></h3>
+            <div class="rel">
+              <canvas id="odds" aria-label="The market-implied (risk-neutral) distribution of SPY at expiry, edge-detected from the SPY fit's GPU prices"></canvas>
+              <div class="read" id="odRead" aria-live="polite"></div>
+            </div>
+            <div class="row even">
+              <div class="chips two">
+                <button data-odds="0">NOV 20</button>
+                <button data-odds="1" aria-pressed="true">DEC 18</button>
+              </div>
+              <div class="foot"><span id="fOd0">EDGE DETECTION: P(S ≤ K) = 1 + e<sup>rT</sup> ∂C/∂K</span></div>
+            </div>
+            <div class="foot wrap"><span id="fOd1">—</span><span id="fOd2"></span></div>
           </div>
         </section>
       </div>

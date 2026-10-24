@@ -11,11 +11,12 @@ import { bsCall, bsPut } from "./bs.js";
 import { barrierClosedForm, dkoClosedForm, vanillaBS, mirrorExponent } from "./barrier.js";
 import { gpuInfo } from "./gpu.js";
 import { priceChainGPU, chainJobs, runJobsCPU } from "./chain.js";
+import { marketOdds, DROP } from "./odds.js";
 import { Camera, fit } from "./wire.js";
 import { drawScene, toMesh, maskToMesh, MESH_S } from "./scene.js";
 import {
   drawPad, padXY, drawKernel, drawCoil, drawExercise, drawError, drawBars, drawBarrierView, drawMethod, drawMirrors,
-  drawLogKernel, drawSmile, drawChain, chainLayout,
+  drawLogKernel, drawSmile, drawChain, chainLayout, drawOdds,
 } from "./panels.js";
 
 const SLICES = 12; // surface slices between the payoff and today
@@ -871,6 +872,87 @@ chainCanvas.addEventListener("pointerleave", () => {
   chainTag();
 });
 
+// ---- the market's odds (panel 13): the SPY fit's distribution, edge-detected ----
+let oddsData = "STARTING";
+let oddsExpiry = 1;
+const oddsCache = new Map(); // per SPY expiry; the fit doesn't move
+const shortDate = (ex) => `${MONTHS[+ex.slice(5, 7) - 1]} ${+ex.slice(8)}`;
+
+// What panel 13 draws: the density per dollar at every strike from 30% down to
+// 20% up (strikes are under a dollar apart; binning them would alias), and the
+// flat-vol lognormal at the same prices
+function oddsView(o) {
+  const lo = Math.round(0.7 * o.spot);
+  const hi = Math.round(1.2 * o.spot);
+  const xs = [];
+  const ds = [];
+  for (let i = 1; i + 1 < o.K.length; i++) {
+    const S = o.K[i] * o.scale;
+    if (S < lo || S > hi) continue;
+    xs.push(S);
+    ds.push(o.density[i] / o.scale);
+  }
+  const x = Float64Array.from(xs);
+  const dens = Float64Array.from(ds);
+  const { T, r } = o.p;
+  const s = o.flat.sigma * Math.sqrt(T);
+  const mu = Math.log(o.sl.S) + (r - 0.5 * o.flat.sigma ** 2) * T;
+  const flatDens = Float64Array.from(x, (S) => Math.exp(-0.5 * ((Math.log(S) - mu) / s) ** 2) / (S * s * Math.sqrt(2 * Math.PI)));
+  return { ...o, x, dens, flatDens, lo, hi };
+}
+
+async function computeOdds(e) {
+  if (oddsCache.has(e)) return oddsCache.get(e);
+  let o;
+  try {
+    o = await marketOdds(SPY, e, { gpu: useGPU });
+  } catch (err) {
+    if (!useGPU) throw err;
+    gpuFailed(err);
+    o = await marketOdds(SPY, e, { gpu: false });
+  }
+  const v = oddsView(o);
+  oddsCache.set(e, v);
+  return v;
+}
+
+async function reodds() {
+  const e = oddsExpiry;
+  try {
+    const v = await computeOdds(e);
+    if (e !== oddsExpiry) return;
+    oddsData = v;
+  } catch (err) {
+    oddsData = `ODDS FAILED: ${err.message.toUpperCase()}`;
+  }
+  oddsStats();
+  if (window.blurDesk) window.blurDesk.odds = oddsData;
+}
+
+const pct1 = (v) => `${(v * 100).toFixed(1)}%`;
+function oddsStats() {
+  const d = oddsData;
+  if (typeof d === "string") {
+    $("odRead").textContent = "";
+    $("fOd1").textContent = d;
+    $("fOd2").textContent = "";
+    return;
+  }
+  const when = shortDate(d.sl.expiry);
+  $("odTag").textContent = `MARKET-IMPLIED (RISK-NEUTRAL) · SPY ${when}`;
+  $("odRead").innerHTML = `MARKET PRICES A <b>${pct1(d.pDown)}</b> CHANCE SPY FALLS MORE THAN ${Math.round(DROP * 100)}% BY ${when}` +
+    `<small>ONE FLAT VOL (${(d.flat.sigma * 100).toFixed(1)}%) WOULD SAY ${pct1(d.flat.pDown)} · RISES MORE THAN ${Math.round(DROP * 100)}%: ${pct1(d.pUp)}</small>`;
+  $("fOd1").innerHTML = `SUMS TO <b>${d.sum.toFixed(4)}</b> · MEAN <b>$${d.meanUsd.toFixed(2)}</b> = PARITY FORWARD <b>$${d.forward.toFixed(2)}</b>`;
+  $("fOd2").textContent = `MERTON FIT TO SPY ${SPY.asof} · ${d.gpu ? "GPU" : "CPU"}: 2 ROWS → ${thousands(d.strikes)} STRIKES · ${d.ms.toFixed(0)} MS`;
+}
+for (const el of document.querySelectorAll("[data-odds]")) {
+  el.addEventListener("click", () => {
+    oddsExpiry = +el.dataset.odds;
+    pick("odds", oddsExpiry);
+    reodds();
+  });
+}
+
 // drawing pad
 const pad = $("pad");
 let last = null;
@@ -930,7 +1012,7 @@ scene.addEventListener("pointercancel", () => (drag = null));
 
 // ---- render loop ----
 const ctxs = {};
-for (const id of ["scene", "pad", "kernel", "coil", "exercise", "error", "bars", "barrier", "method", "mirrors", "logk", "smile", "chain"]) ctxs[id] = $(id).getContext("2d");
+for (const id of ["scene", "pad", "kernel", "coil", "exercise", "error", "bars", "barrier", "method", "mirrors", "logk", "smile", "chain", "odds"]) ctxs[id] = $(id).getContext("2d");
 
 function frame(ms) {
   const t = ms / 1000;
@@ -999,6 +1081,10 @@ function frame(ms) {
     const [W, H] = fit(chainCanvas, ctxs.chain);
     drawChain(ctxs.chain, W, H, chainData, chainHover);
   }
+  {
+    const [W, H] = fit($("odds"), ctxs.odds);
+    drawOdds(ctxs.odds, W, H, oddsData);
+  }
   requestAnimationFrame(frame);
 }
 
@@ -1018,6 +1104,7 @@ async function start() {
   }
   requestAnimationFrame(frame);
   changed();
+  reodds();
   loadChain();
 }
 

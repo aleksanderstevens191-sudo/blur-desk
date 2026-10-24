@@ -846,3 +846,66 @@ export function drawChain(ctx, W, H, d, hover) {
     label(ctx, `+${CHAIN_SCALE} VOL PTS`, lx + lw + 4, 8, { align: "left", size: 8, alpha: 0.5 });
   }
 }
+
+// 13: the market's odds. The risk-neutral density of SPY at one expiry, edge-
+// detected from the SPY fit's GPU prices (white), against what one flat vol gives
+// (dashed). The tail below a 10% fall is filled amber; marks at today's price,
+// the fall and the forward.
+export function drawOdds(ctx, W, H, d) {
+  if (!d || typeof d === "string") return idle(ctx, W, H, d || "—");
+  const { x, dens, flatDens: flat, lo, hi, spot, down, forward } = d;
+  const l = 8;
+  const r = 8;
+  const top = d.top ?? 18;
+  const bot = 16;
+  let peak = 0;
+  for (let i = 0; i < dens.length; i++) peak = Math.max(peak, dens[i], flat[i]);
+  const px = (S) => l + ((S - lo) / (hi - lo)) * (W - l - r);
+  const py = (v) => top + (1 - v / (1.08 * peak)) * (H - top - bot);
+  const frame = new Path2D();
+  frame.moveTo(l, H - bot);
+  frame.lineTo(W - r, H - bot);
+  glow(ctx, frame, WHITE, 0.3, 1, 0);
+  const grid = new Path2D();
+  for (const v of ticks(lo, hi, Math.max(4, Math.min(10, Math.floor(W / 90))))) {
+    grid.moveTo(px(v), top);
+    grid.lineTo(px(v), H - bot);
+    label(ctx, `$${v}`, px(v), H - 6, { size: d.tick ?? 8, alpha: 0.45 });
+  }
+  glow(ctx, grid, WHITE, 0.06, 1, 0);
+
+  // the tail past the fall, filled under the market's curve
+  ctx.globalCompositeOperation = "lighter";
+  const tail = new Path2D();
+  tail.moveTo(px(x[0]), py(0));
+  for (let i = 0; i < x.length && x[i] <= down; i++) tail.lineTo(px(x[i]), py(dens[i]));
+  tail.lineTo(px(down), py(0));
+  tail.closePath();
+  ctx.fillStyle = `rgba(${AMBER},0.28)`;
+  ctx.fill(tail);
+  ctx.globalCompositeOperation = "source-over";
+
+  const mark = (S, alpha, dash) => {
+    const p = new Path2D();
+    p.moveTo(px(S), top);
+    p.lineTo(px(S), H - bot);
+    ctx.setLineDash(dash);
+    glow(ctx, p, WHITE, alpha, 1, 0);
+    ctx.setLineDash([]);
+  };
+  mark(spot, 0.5, [2, 3]);
+  mark(forward, 0.25, [1, 3]);
+  const dn = new Path2D();
+  dn.moveTo(px(down), top);
+  dn.lineTo(px(down), H - bot);
+  glow(ctx, dn, AMBER, 0.9, 1, 0.6);
+  const sz = d.tick ?? 8;
+  label(ctx, `TODAY $${spot.toFixed(2)}`, px(spot) + 4, H - bot - 8, { align: "left", size: sz, alpha: 0.6 });
+  label(ctx, `−10% $${down.toFixed(2)}`, px(down) - 4, H - bot - 8, { align: "right", size: sz, rgb: AMBER, alpha: 0.95 });
+
+  ctx.setLineDash([4, 4]);
+  glow(ctx, polyline(x, flat, px, py), WHITE, 0.45, 1, 0);
+  ctx.setLineDash([]);
+  glow(ctx, polyline(x, dens, px, py), WHITE, 1, 1.5, 1.2);
+  label(ctx, "WHITE: MARKET-IMPLIED (RISK-NEUTRAL) DENSITY · DASHED: ONE FLAT VOL", l, 7, { align: "left", size: sz, alpha: 0.5 });
+}

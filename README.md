@@ -290,6 +290,24 @@ Out of sample (`reference/chain_oos.py`), RMS in vol points, Merton against flat
 - **Merton per expiry.** Nothing ties the expiries together, the far put wings stay unfitted, and 7 long expiries sit at the bound on the mean jump.
 - **End to end.** The time is dominated by building the kernels in single-threaded JavaScript, not by the GPU.
 
+## The market's odds
+
+The blur turns a payoff into a price. Its second derivative in the strike turns the price back into the distribution the market is pricing (Breeden and Litzenberger): P(S_T ≤ K) = 1 + e^{rT} ∂C/∂K. Raw quotes are too noisy to differentiate twice, so the input is the Merton fit to them (`src/spy_fit.json`), priced on the GPU as the smile panel prices it: one call row and one put row give every strike, here about 4,000-5,000 strikes under a dollar apart. Slopes between neighbouring strikes give the CDF, its steps give each strike's probability (`src/odds.js`).
+
+| SPY, fitted 2026-10-22 (last $763.96) | Nov 20 | Dec 18 |
+| --- | ---: | ---: |
+| P(falls more than 10%, below $687.56) | 4.3% | 7.6% |
+| the same from one flat vol (14.6%) | 0.4% | 2.9% |
+| P(rises more than 10%, above $840.36) | 0.2% | 3.0% |
+| probabilities sum to | 1.000000 | 1.000000 |
+| mean vs the parity forward | $768.18 = $768.18 | $768.11 = $768.11 |
+
+These are risk-neutral odds: what the prices imply, including what the market charges for bearing the risk, not a forecast. `node src/test-odds.mjs` (64-bit) and `/check.html?only=odds` (GPU) check that the distribution sums to 1 within 0.001, that its mean is the parity forward within a cent, that the 10% odds match Merton's closed-form CDF within 1e-4 (1e-6 on the software GPU), and on the GPU that the CDF at every strike is within 1e-4 of the 64-bit run (4.9e-6). The rows are blurred directly, not by FFT: the 32-bit FFT's error scales with the largest value in the row, which made the slopes wrong by up to 7e-4.
+
+![Panel 13 of the demo: the market-implied density of SPY on Dec 18 against one flat vol, the tail below a 10% fall in amber](docs/demo_market_odds.png)
+
+In the demo, **13 / MARKET ODDS** draws the density against the flat-vol lognormal, fills the tail below a 10% fall, and reads off the odds for Nov 20 or Dec 18.
+
 ## What GitHub Actions checks
 
 Every push runs four jobs (`.github/workflows/checks.yml`); any failure turns the run red:
@@ -298,8 +316,8 @@ Every push runs four jobs (`.github/workflows/checks.yml`); any failure turns th
 | --- | --- |
 | Python reference | `check.py`, the three barrier checks, and for fat tails: `check_kernels.py` (the table above), `check_smile.py` (no smile from a Gaussian, flattening with maturity, the negative-jump skew), `check_calibration.py` (the synthetic chain) and `check_spy_fit.py` (re-runs the SPY fit from the committed snapshot: it must reproduce `src/spy_fit.json`, beat flat Black-Scholes at least 4 times, stay within 1 vol point of every quote and fit a negative mean jump) |
 | Full SPY chain | `check_chain_fit.py` reruns the whole pipeline from the saved snapshot (filters, parity forwards with early exercise, European vols, the Merton fit per expiry and the reference prices) and must reproduce the committed `stage1.json` and `src/chain_data.json` (the refit's Merton prices to within 1e-4 dollars, because least squares lands a little differently on other numpy and scipy builds; the committed prices must follow exactly from the committed fit); `chain_oos.py --check` must reproduce every out-of-sample number. About 4 minutes |
-| JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves) and `test-chain.mjs` (the whole chain's jobs vs QuantLib and Merton's series), then a build of every page |
-| WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, the fat-tailed kernels and smile, and the whole SPY chain in one submit, all in 32-bit floats within 1e-4 of Python |
+| JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves) `test-chain.mjs` (the whole chain's jobs vs QuantLib and Merton's series) and `test-odds.mjs` (the market's odds), then a build of every page |
+| WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, the fat-tailed kernels and smile, the whole SPY chain in one submit, and the market's odds, all in 32-bit floats within 1e-4 of Python |
 
 ## Layout
 
@@ -397,7 +415,7 @@ node src/test-gpu.mjs   # /check.html in headless Chromium on a software GPU, as
 - [x] Day 2: Black-Scholes as an off-center blur; American puts vs a binomial tree; JS core
 - [x] Day 3: port `blur` to a WebGPU compute shader (WGSL), check it against `src/fixtures.json`
 - [x] Day 4: draw-any-payoff canvas + time-to-expiry slider (blur radius = σ√T)
-- [ ] Day 5: real SPY option chain; smooth the volatility smile, then edge-detect for the market's odds (chain and smile fit done, see [Calibrated to SPY](#calibrated-to-spy); the odds still to come)
+- [x] Day 5: real SPY option chain; smooth the volatility smile, then edge-detect for the market's odds (see [Calibrated to SPY](#calibrated-to-spy) and [The market's odds](#the-markets-odds))
 - [ ] Day 6: benchmark GPU vs JS vs numpy; record the 15-second demo
 - [ ] Day 7: deploy, publish the repo, post the launch thread
 
