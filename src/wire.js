@@ -77,8 +77,11 @@ export function glow(ctx, path, rgb, alpha = 1, width = 1, halo = 1) {
   ctx.globalCompositeOperation = "source-over";
 }
 
+// Text size multiplier for every canvas label (the recording mode enlarges them)
+export const TEXT = { scale: 1 };
+
 export function label(ctx, text, x, y, { rgb = "200,204,210", alpha = 0.75, align = "center", base = "middle", size = 10, weight = 500 } = {}) {
-  ctx.font = `${weight} ${size}px ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
+  ctx.font = `${weight} ${size * TEXT.scale}px ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
   ctx.fillStyle = `rgba(${rgb},${alpha})`;
   ctx.textAlign = align;
   ctx.textBaseline = base;

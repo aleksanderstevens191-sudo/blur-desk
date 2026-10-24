@@ -1,6 +1,6 @@
 // The small inspection panels under the main view. Each one draws a little
 // wireframe of what its control does.
-import { Camera, Lines, glow, label, WHITE, AMBER, RED } from "./wire.js";
+import { Camera, Lines, glow, label, WHITE, AMBER, RED, TEXT } from "./wire.js";
 import { S_MIN, S_MAX } from "./pricer.js";
 
 const TAU = 2 * Math.PI;
@@ -653,7 +653,7 @@ export function drawLogKernel(ctx, W, H, d) {
 // calibrated Merton curve dashed, the live kernel solid.
 export function drawSmile(ctx, W, H, d) {
   if (!d || typeof d === "string") return idle(ctx, W, H, d || "—");
-  const l = 34;
+  const l = 34 * TEXT.scale;
   const r = 8;
   const top = 16;
   const bot = 16;

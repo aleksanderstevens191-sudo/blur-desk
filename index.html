@@ -104,6 +104,40 @@
       .note { margin-top: 12px; color: var(--dim); font-size: 9px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
       .note a { color: var(--muted); }
 
+
+      /* ?record=1: one 1080 x 1080 frame for the screen recording */
+      body.rec .studio { display: none; }
+      body.rec { overflow: hidden; }
+      #rec { position: fixed; left: 8px; top: 8px; width: 1080px; height: 1080px; transform-origin: 0 0; background: var(--bg); border: 0; padding: 26px 28px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; font-size: 16px; }
+      #rec .recHead { border: 1px solid var(--line); border-radius: 10px; }
+      #rec .recBrand { margin-left: auto; font-size: 18px; color: var(--muted); letter-spacing: 0.1em; }
+      #rec .cells { grid-template-columns: 1.55fr 1fr 1fr 1.25fr 1.15fr; }
+      #rec .cell { padding: 12px 14px; gap: 4px; }
+      #rec .cell span { font-size: 13px; }
+      #rec .cell b { font-size: 21px; }
+      #rec .recCap { display: flex; gap: 16px; align-items: baseline; font-size: 24px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 4px; }
+      #rec .recCap b { color: var(--amber); }
+      #rec .recScene { flex: 1 1 auto; min-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+      #rec .view, #rec #scene { height: 100%; }
+      #rec .legend { font-size: 14px; gap: 6px; top: 16px; left: 18px; }
+      #rec .legend i { width: 22px; height: 3px; }
+      #rec .hint { display: none; }
+      #rec .recRow { flex: 0 0 330px; min-height: 0; display: grid; grid-template-columns: 1fr 1.25fr; grid-template-rows: 100%; gap: 12px; }
+      #rec .recRow .panel { grid-column: auto; min-height: 0; }
+      #rec .panel { padding: 12px 14px; gap: 8px; border-radius: 8px; }
+      #rec .panel h3 { font-size: 16px; }
+      #rec .panel h3 em { font-size: 14px; }
+      #rec .panel canvas, #rec .panel #smile { flex: 1 1 auto; height: auto; min-height: 0; }
+      #rec .panel .foot { font-size: 14px; flex-wrap: wrap; row-gap: 2px; }
+      #rec .chips, #rec .toggle, #rec .row, #rec input, #rec .sl { display: none; }
+      #rec #oddsPanel { position: absolute; left: 28px; right: 28px; top: 188px; bottom: 26px; opacity: 0; pointer-events: none; transition: opacity 0.45s ease; border-color: var(--line2); }
+      #rec #oddsPanel.show { opacity: 1; }
+      #rec #oddsPanel .rel { flex: 1 1 auto; min-height: 0; }
+      #rec #odds { height: 100%; }
+      #rec .read { position: absolute; left: 18px; top: 46px; max-width: 40%; font-size: 40px; line-height: 1.15; }
+      #rec .read small { font-size: 18px; margin-top: 14px; }
+      #recHint { position: fixed; left: 8px; color: var(--dim); font-size: 11px; }
+
       @media (max-width: 760px) {
         .studio { padding: 8px 8px 16px; }
         .bar { grid-template-columns: 1fr; }
