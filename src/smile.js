@@ -22,8 +22,10 @@ export const DEMO_GRID = { ptsPerSd: 40, nSd: 10, tail: 1e-15, maxHalf: 12 };
 export const FFT_FROM = 256;
 
 // Blur `rows` rows of n values (row-major) with one kernel w, grid spacing dx.
-export async function blurRows(F, rows, n, w, dx, gpu = true) {
-  const wide = w.length > FFT_FROM;
+// direct: never the FFT, whose 32-bit error scales with the row's largest value
+// rather than with each output's own terms.
+export async function blurRows(F, rows, n, w, dx, gpu = true, direct = false) {
+  const wide = !direct && w.length > FFT_FROM;
   if (gpu) return wide ? fftBlurGPU(F, rows, n, w, { dx }) : directBlurGPU(F, rows, n, w);
   if (wide) return fftBlurCPU(F, rows, n, w, { dx });
   const out = new Float64Array(rows * n);
@@ -39,7 +41,7 @@ const PHI = (x) => Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
 // Returns { k, K, cp, price, iv } arrays (k ascending) plus the grid used.
 // Implied vols are NaN where the price is outside the no-arbitrage bounds or the
 // option's vega is under minVega (a 32-bit price there can't pin a volatility).
-export async function smile(model, p, { grid = null, omax = null, kMax = null, S0 = 100, gpu = true, minVega = 0.05 } = {}) {
+export async function smile(model, p, { grid = null, omax = null, kMax = null, S0 = 100, gpu = true, minVega = 0.05, direct = false } = {}) {
   grid ??= gridFor(model, p, DEMO_GRID);
   const { y, dx, J } = grid;
   const w = grid.w ?? kernel(model, y, p);
@@ -53,7 +55,7 @@ export async function smile(model, p, { grid = null, omax = null, kMax = null, S
   rowsF.set(kinkCorrection(z, F, "call"), 0);
   rowsF.set(kinkCorrection(z, F, "put"), n);
   const t0 = performance.now();
-  const out = await blurRows(rowsF, 2, n, w, dx, gpu);
+  const out = await blurRows(rowsF, 2, n, w, dx, gpu, direct);
   const ms = performance.now() - t0;
   const len = 2 * omax + 1;
   const res = {
