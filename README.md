@@ -394,12 +394,15 @@ node src/test-barriers.mjs
 node src/test-fft.mjs
 node src/test-kernels.mjs
 node src/test-chain.mjs
+node src/test-odds.mjs
 
 npm install
 npm run dev        # open the printed URL in a WebGPU browser (Chrome, Edge, Safari 26)
                    # /            the interactive demo
+                   # /?record=1   the 15-second clip in a 1080 x 1080 frame (space plays, R resets;
+                   #              &autoplay=1 starts when ready, &scale=0.5 for 1080 device px on a 2x screen)
                    # /check.html  the GPU vs Python fixture check
-                   #              (?only=fixtures, fft, kernels or chain for one section)
+                   #              (?only=fixtures, fft, kernels, chain or odds for one section)
                    # /bench.html  the barrier benchmark
                    # /fft-bench.html  FFT vs direct blur, crossover sweep
                    # /chain-bench.html  the whole SPY chain: GPU compute only and end to end

@@ -12,7 +12,7 @@ import { barrierClosedForm, dkoClosedForm, vanillaBS, mirrorExponent } from "./b
 import { gpuInfo } from "./gpu.js";
 import { priceChainGPU, chainJobs, runJobsCPU } from "./chain.js";
 import { marketOdds, DROP } from "./odds.js";
-import { Camera, fit } from "./wire.js";
+import { Camera, fit, TEXT } from "./wire.js";
 import { drawScene, toMesh, maskToMesh, MESH_S } from "./scene.js";
 import {
   drawPad, padXY, drawKernel, drawCoil, drawExercise, drawError, drawBars, drawBarrierView, drawMethod, drawMirrors,
@@ -29,9 +29,23 @@ const PRESETS = {
 };
 const CLOSED_FORM = { call: bsCall, put: bsPut };
 
+// The zigzag is piecewise linear, so it is a sum of calls: [strike, change of slope]
+// at each corner. Drawn only up to `pen` (the recording draws it left to right),
+// it stays flat past the pen, which is one more corner there.
+const ZIGZAG_KINKS = [[60, 2.5], [140, 2.5]];
+for (let K = 70; K <= 130; K += 10) ZIGZAG_KINKS.push([K, (K / 10) % 2 ? -5 : 5]);
+ZIGZAG_KINKS.sort((a, b) => a[0] - b[0]);
+function zigzagKinks(pen = null) {
+  if (pen === null || pen >= 140) return ZIGZAG_KINKS;
+  const kinks = ZIGZAG_KINKS.filter(([K]) => K < pen);
+  const slope = kinks.reduce((a, [, w]) => a + w, 0);
+  return slope ? [...kinks, [pen, -slope]] : kinks;
+}
+const kinkPayoff = (kinks) => (S) => kinks.reduce((a, [K, w]) => a + w * Math.max(S - K, 0), 0);
+
 const $ = (id) => document.getElementById(id);
 const state = {
-  preset: "call", T: +$("T").value, sigma: +$("sigma").value, american: false,
+  preset: "call", pen: null, T: +$("T").value, sigma: +$("sigma").value, american: false,
   barrier: "off", io: "out", L: +$("L").value, U: +$("U").value, method: "weighted", shift: true, steps: 48,
   model: "gaussian", // blur kernel: gaussian | merton | vg
   spyFit: false, // Merton with the SPY calibration's exact parameters (until a slider moves)
@@ -169,16 +183,26 @@ function exerciseBoundary() {
 
 function maxError(r) {
   const f = CLOSED_FORM[r.preset];
-  if (!f || r.american) {
+  const kinks = r.preset === "zigzag" ? zigzagKinks(r.pen) : null;
+  if ((!f && !kinks) || r.american) {
     errs = null;
     return null;
   }
+  // a call struck at K under the kernel on show (Merton's series, the variance
+  // gamma integral, or Black-Scholes); the zigzag is a sum of them
+  const p = { ...modelParams(r), T: r.T, r: R };
+  const call = (S, K) => {
+    if (r.T <= 0) return Math.max(S - K, 0);
+    if (r.model === "merton") return mertonSeries(S, K, "call", p);
+    if (r.model === "vg") return vgPrice(S, K, "call", p);
+    return bsCall(S, K, r.sigma, r.T, R);
+  };
+  const stride = r.model === "vg" ? Math.ceil(r.S.length / 160) : 1; // the VG integral is slower
+  if (kinks) return curveError(r.S, r.V, (S) => kinks.reduce((a, [K, w]) => a + w * call(S, K), 0), stride);
   if (r.model !== "gaussian") {
-    // Merton's series; the variance gamma mixture integral is slower, so every few nodes
     if (r.T <= 0) return curveError(r.S, r.V, (S) => f(S, S0, r.sigma, 0, R));
-    const p = { ...modelParams(r), T: r.T, r: R };
     if (r.model === "merton") return curveError(r.S, r.V, (S) => mertonSeries(S, S0, r.preset, p));
-    return curveError(r.S, r.V, (S) => vgPrice(S, S0, r.preset, p), Math.ceil(r.S.length / 160));
+    return curveError(r.S, r.V, (S) => vgPrice(S, S0, r.preset, p), stride);
   }
   return curveError(r.S, r.V, (S) => f(S, S0, r.sigma, r.T, R));
 }
@@ -437,6 +461,7 @@ for (const id of ["L", "U"]) {
 
 function setPreset(name) {
   state.preset = name;
+  state.pen = null;
   for (const b of document.querySelectorAll("[data-preset]")) b.setAttribute("aria-pressed", String(b.dataset.preset === name));
   if (name) payoff = new Payoff(PRESETS[name]);
 }
@@ -1010,12 +1035,152 @@ scene.addEventListener("pointermove", (e) => {
 scene.addEventListener("pointerup", () => (drag = null));
 scene.addEventListener("pointercancel", () => (drag = null));
 
+
+// ---- ?record=1: a 1080 x 1080 frame and a fixed 15-second sequence ----
+// Draw a zigzag, melt it into a price curve by sweeping expiry, switch the kernel
+// to the SPY fit (the smile appears against SPY's quotes), then hold on the
+// market's odds. Every input is a function of the time since PLAY, so a replay
+// repeats it exactly; every number on screen comes from the pricing as it runs.
+// Space plays (or replays), R resets; &autoplay=1 starts as soon as it is ready;
+// &scale=0.5 draws the 1080 frame at half size (1080 device pixels on a 2x screen).
+const params = new URLSearchParams(location.search);
+const REC_ON = params.get("record") === "1";
+const REC_STEPS = [
+  { at: 0, step: "01", text: "DRAW A PAYOFF" },
+  { at: 3.2, step: "02", text: "BLUR IT ON THE GPU · LONGER EXPIRY, WIDER BLUR" },
+  { at: 8.0, step: "03", text: "SWAP IN THE BLUR FITTED TO REAL SPY OPTIONS" },
+  { at: 11.0, step: "04", text: "EDGE-DETECT THE PRICES: THE MARKET'S ODDS" },
+];
+const REC_END = 15;
+const REC_T0 = 0.01; // expiry while drawing
+const REC_T1 = 1; // expiry after the sweep
+const ease = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * u));
+const rec = { on: REC_ON, playing: false, t0: 0, t: 0, applied: {} };
+
+// What the sequence sets at time t
+function recInputs(t) {
+  const pen = t < 0.3 ? 60 : Math.min(140, 60 + Math.round((80 * ease((t - 0.3) / 2.6)) / Payoff.STEP) * Payoff.STEP);
+  const T = Math.round((REC_T0 + (REC_T1 - REC_T0) * ease((t - 3.2) / 4.4)) * 100) / 100;
+  const phase = REC_STEPS.filter((s) => t >= s.at).length - 1;
+  return { pen: +pen.toFixed(1), T, phase };
+}
+
+function recApply(t) {
+  const want = recInputs(t);
+  const had = rec.applied;
+  let price = false;
+  if (want.pen !== had.pen) {
+    state.preset = "zigzag";
+    state.pen = want.pen >= 140 ? null : want.pen;
+    payoff = new Payoff(state.pen === null ? PRESETS.zigzag : kinkPayoff(zigzagKinks(state.pen)));
+    price = true;
+  }
+  if (want.T !== had.T) {
+    state.T = want.T;
+    $("T").value = want.T;
+    showSliders();
+    price = true;
+  }
+  if (want.phase !== had.phase) {
+    const s = REC_STEPS[want.phase];
+    $("recStep").textContent = s.step;
+    $("recCap").textContent = s.text;
+    if (want.phase >= 2 && !state.spyFit) {
+      state.expiry = 1;
+      pick("expiry", 1);
+      setSpy(true);
+      setModel("spy"); // reprices the surface and the smile
+      price = false;
+    }
+    $("oddsPanel").classList.toggle("show", want.phase >= 3);
+  }
+  rec.applied = want;
+  if (price) reprice();
+}
+
+function recReset() {
+  rec.playing = false;
+  rec.t = 0;
+  rec.applied = {};
+  Object.assign(state.jumps.merton, { lam: 1, m: -0.1, delta: 0.1 });
+  state.sigma = 0.3;
+  $("sigma").value = 0.3;
+  setSpy(false);
+  setModel("gaussian");
+  cam.az = -0.55;
+  cam.el = 0.42;
+  setView("orbit");
+  recApply(0);
+  resmile();
+}
+
+function recPlay() {
+  recReset();
+  rec.playing = true;
+  rec.t0 = performance.now();
+  $("recHint").textContent = "PLAYING · SPACE REPLAYS · R RESETS";
+}
+
+// Move the panels the clip needs into the 1080 frame; everything else stays hidden
+function recLayout() {
+  document.body.classList.add("rec");
+  TEXT.scale = 1.6;
+  const stage = document.createElement("div");
+  stage.id = "rec";
+  stage.innerHTML = `<div class="recHead"></div>
+    <div class="recCap"><b id="recStep">01</b><span id="recCap">—</span><span class="recBrand">BLUR DESK</span></div>
+    <div class="recScene"></div><div class="recRow"></div>`;
+  stage.querySelector(".recHead").append(document.querySelector(".cells"));
+  stage.querySelector(".recScene").append(document.querySelector(".view"));
+  stage.querySelector(".recRow").append($("pad").closest(".panel"), $("smile").closest(".panel"));
+  stage.append($("oddsPanel"));
+  const hint = document.createElement("div");
+  hint.id = "recHint";
+  hint.textContent = "GETTING READY…";
+  document.body.append(stage, hint);
+  const fitStage = () => {
+    const k = +params.get("scale") || Math.min(1, (innerWidth - 16) / 1080, (innerHeight - 40) / 1080);
+    stage.style.transform = `scale(${k})`;
+    hint.style.top = `${8 + 1080 * k + 8}px`;
+  };
+  addEventListener("resize", fitStage);
+  fitStage();
+  addEventListener("keydown", (e) => {
+    if (e.code === "Space" && rec.ready) {
+      e.preventDefault();
+      recPlay();
+    } else if (e.key === "r" || e.key === "R") {
+      recReset();
+      $("recHint").textContent = "READY · SPACE PLAYS 15 S";
+    }
+  });
+}
+
+// Compile the shaders and fill the caches the clip uses before it can start:
+// the SPY smile under the fit, and the market's odds at Dec 18
+async function recWarm() {
+  const fitState = { ...snapshot(), spy: true, expiry: 1, model: "merton", spyFit: true, sigma: FIT.sigma, jumps: { merton: { lam: FIT.lam, m: FIT.m, delta: FIT.delta } } };
+  await computeSmile(fitState);
+  await reodds();
+  rec.ready = true;
+  $("recHint").textContent = "READY · SPACE PLAYS 15 S · R RESETS";
+  if (params.get("autoplay") === "1") recPlay();
+}
+
 // ---- render loop ----
 const ctxs = {};
 for (const id of ["scene", "pad", "kernel", "coil", "exercise", "error", "bars", "barrier", "method", "mirrors", "logk", "smile", "chain", "odds"]) ctxs[id] = $(id).getContext("2d");
 
 function frame(ms) {
-  const t = ms / 1000;
+  if (rec.playing) {
+    rec.t = Math.min(REC_END, Math.max(0, (ms - rec.t0) / 1000));
+    recApply(rec.t);
+    if (rec.t >= REC_END) {
+      rec.playing = false;
+      $("recHint").textContent = "DONE · SPACE REPLAYS · R RESETS";
+    }
+  }
+  const t = rec.on ? rec.t : ms / 1000;
   if (mode === "orbit") {
     cam.az += (-0.55 + 0.5 * Math.sin(t * 0.13) - cam.az) * 0.05;
     cam.el += (0.42 + 0.08 * Math.sin(t * 0.09) - cam.el) * 0.05;
@@ -1101,6 +1266,13 @@ async function start() {
     useGPU = false;
     $("cGpu").textContent = "CPU FALLBACK";
     $("fGpu").textContent = e.message.toUpperCase();
+  }
+  if (rec.on) {
+    recLayout();
+    recReset();
+    requestAnimationFrame(frame);
+    await recWarm();
+    return;
   }
   requestAnimationFrame(frame);
   changed();
