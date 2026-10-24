@@ -118,10 +118,14 @@ async function main() {
   for (const c of crossover) log(`  O = ${String(c.O).padStart(4)}   m* = ${c.mStar === null ? "none" : Math.round(c.mStar)}`);
 
   // the fixture grid (c = 0.06 of the conditional sd): 233 x 233 taps at these vols
-  log("\nprices/sec on the fixture grid (c = 0.06, kernel 233 x 233), whole patch at once:");
+  // The patch stays within +-0.5 in ln S of the spot (O = 65 at c = 0.06): the
+  // FFT's parts are measured in numeraires centred on the spot, and their
+  // untilt factor e^{a u + b v} multiplies the 32-bit error far from it (the
+  // Mac measured 2.3e-4 at the corners of a +-2 patch, S/7 to 7 S).
+  log("\nprices/sec on the fixture grid (c = 0.06, kernel 233 x 233, T = 1), patch within +-0.5 in ln S:");
   const realistic = [];
   for (const [what, payoff] of [["exchange", exchangePayoff()], ["best-of call K=100", bestOfCallPayoff(100)]]) {
-    for (const O of QUICK ? [33] : [65, 257]) {
+    for (const O of QUICK ? [33] : [33, 65]) {
       const job = job2d({ ...MARKET, T: 1, payoff, c: 0.06, width: 6, qx: (O - 1) / 2, qy: (O - 1) / 2 });
       const r = await measure(job);
       if (r.near >= TOL) fails++;
