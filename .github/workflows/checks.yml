@@ -1,4 +1,4 @@
-# Every push: the Python reference checks, the full SPY chain rerun from its
+# Every push: the Python reference checks (two stocks included), the full SPY chain rerun from its
 # saved snapshot, the JS core against the Python fixtures and a build of the
 # demo pages, and the WebGPU shaders against the same fixtures in headless
 # Chromium on its software GPU (SwiftShader). A check that fails exits
@@ -36,6 +36,10 @@ jobs:
         run: python reference/check_calibration.py
       - name: Real SPY chain, Merton fit vs flat Black-Scholes
         run: python reference/check_spy_fit.py
+      - name: Two stocks, 2D blur vs Margrabe, Stulz, the 1D product and QuantLib
+        run: python reference/check_2d.py
+      - name: Two stocks, exchange value vs correlation, spread vs Kirk
+        run: python reference/intuition_2d.py
 
   chain:
     name: Full SPY chain, rerun from the saved snapshot
@@ -71,6 +75,8 @@ jobs:
         run: node src/test-chain.mjs
       - name: The market's odds (sum, mean, tail odds vs Merton's closed form)
         run: node src/test-odds.mjs
+      - name: Two stocks, the 2D blur in 64-bit JS vs Python, 2D FFT, wraparound test
+        run: node src/test-2d.mjs
       - run: npm ci
       - name: Build the demo, check and bench pages
         run: npm run build
@@ -98,3 +104,7 @@ jobs:
         run: node src/test-gpu.mjs chain
       - name: The market's odds edge-detected from GPU prices
         run: node src/test-gpu.mjs odds
+      - name: Two stocks, the 2D blur on the GPU (direct and FFT) vs Python, wraparound test
+        run: node src/test-gpu.mjs 2d
+      - name: Two stocks, the demo's panel 14 driven like a user, live errors under 1e-4
+        run: node src/test-demo-2d.mjs

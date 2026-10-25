@@ -1,0 +1,105 @@
+Two-stock 2D blur on the GPU (Stage 2). Software adapter (SwiftShader, headless Chromium) in the
+build container; Apple GPU numbers come from /check.html?only=2d and /bench2d.html on the Mac.
+
+== node src/test-2d.mjs (64-bit JS core and FFT plan vs Python) ==
+JS 64-bit blur vs Python, same grid (c = 0.06, +-6 sd, patch +-0.2 in ln S)
+PASS exchange       rho= 0.5 image 259x259 kernel 233x233  25 patch prices |js-py| 4.5e-13  closed form |js-py| 7.1e-15
+PASS exchange       rho=-0.5 image 273x289 kernel 237x235  25 patch prices |js-py| 4.1e-13  closed form |js-py| 0.0e+0
+PASS exchange       rho= 0.9 image 577x577 kernel 469x469  25 patch prices |js-py| 1.5e-12  closed form |js-py| 0.0e+0
+PASS exchange       rho=-0.5 image 255x251 kernel 245x237  25 patch prices |js-py| 1.2e-12  closed form |js-py| 0.0e+0
+PASS best_of_call   rho= 0.5 image 259x259 kernel 233x233  25 patch prices |js-py| 5.0e-13  closed form |js-py| 4.3e-14
+PASS best_of_call   rho=-0.3 image 239x235 kernel 211x215  25 patch prices |js-py| 1.3e-13  closed form |js-py| 2.8e-14
+PASS best_of_call   rho=-0.5 image 255x251 kernel 245x237  25 patch prices |js-py| 1.4e-12  closed form |js-py| 0.0e+0
+PASS worst_of_call  rho= 0.5 image 259x259 kernel 233x233  25 patch prices |js-py| 2.4e-13  closed form |js-py| 2.8e-14
+PASS spread         rho= 0.7 image 315x323 kernel 283x285  25 patch prices |js-py| 6.5e-13
+PASS call_x_put     rho= 0.0 image 231x241 kernel 205x207  25 patch prices |js-py| 7.1e-15  closed form |js-py| 3.6e-15
+
+FFT plan (fft2d.js) in 64-bit vs the direct blur, relative to the largest price
+PASS exchange       rho= 0.5 N=512x512 parts (0,0) (1,0) (1,1)          split 2.4e-14  plain 2.4e-14
+PASS exchange       rho=-0.5 N=512x512 parts (0,0) (1,0) (0,1) (1,1)    split 2.6e-14  plain 2.5e-14
+PASS exchange       rho=-0.5 N=256x256 parts (0,0) (1,0) (0,1) (1,1)    split 2.8e-14  plain 4.9e-14
+PASS best_of_call   rho= 0.5 N=512x512 parts (0,0) (1,0) (0,1) (1,1)    split 2.3e-14  plain 2.2e-14
+PASS best_of_call   rho=-0.3 N=256x256 parts (1,0) (0,1) (1,1)          split 1.3e-14  plain 1.5e-14
+PASS best_of_call   rho=-0.5 N=256x256 parts (0,0) (1,0) (0,1) (1,1)    split 1.7e-14  plain 4.0e-14
+PASS worst_of_call  rho= 0.5 N=512x512 parts (0,0) (1,0) (0,1) (1,1)    split 1.3e-14  plain 1.4e-14
+PASS spread         rho= 0.7 N=512x512 parts (0,0) (1,0) (0,1) (1,1)    split 2.8e-14  plain 2.7e-14
+PASS call_x_put     rho= 0.0 N=256x256 parts (1,0)                      split 8.6e-15  plain 1.0e-14
+
+wraparound: image zero except its far edges = 100; outputs that can't reach them must be 0
+PASS image 259x259 padded N=512x512: leak 2.2e-16
+PASS image 259x259 one size short N=256x512: leak 7.9e-3 (caught)
+PASS image 259x259 one size short N=512x256: leak 7.9e-3 (caught)
+PASS image 273x289 padded N=512x512: leak 1.4e-16
+PASS image 273x289 one size short N=256x512: leak 2.5e-2 (caught)
+PASS image 273x289 one size short N=512x256: leak 6.5e-2 (caught)
+PASS image 231x241 padded N=256x256: leak 1.7e-16
+PASS image 231x241 one size short N=128x256: leak 7.2e-2 (caught)
+PASS image 231x241 one size short N=256x128: leak 1.0e-1 (caught)
+PASS exchange payoff, one size short N=256x512: |fft - direct| 1.3e-8 (caught)
+all 2D checks pass
+
+== /check.html?only=2d (SwiftShader) ==
+two-stock options, 2D blur on the GPU (direct and FFT) vs Python (reference/make_2d_fixtures.py):
+grid c = 0.06 of the conditional sds, kernel +-6 sd, patch +-0.2 in ln S1 and ln S2;
+|gpu - py| is the worst of 25 prices on the patch (5 x 5, the spot among them).
+PASS exchange      rho= 0.5 s=0.3/0.3 T=1 image 259x259 kernel 233x233  spot gpu=11.923539 py=11.923538  direct 4.66e-6 (146 ms)  fft N=512x512 parts 3 5.58e-6 (287 ms)
+PASS exchange      rho=-0.5 s=0.3/0.2 T=0.5 image 273x289 kernel 237x235  spot gpu=16.621631 py=16.621634  direct 3.25e-6 (300 ms)  fft N=512x512 parts 4 1.68e-5 (212 ms)
+PASS exchange      rho= 0.9 s=0.2/0.2 T=0.5 image 577x577 kernel 469x469  spot gpu=2.522718 py=2.522712  direct 4.71e-6 (6529 ms)  fft N=1024x1024 parts 3 1.16e-5 (1320 ms)
+PASS exchange      rho=-0.5 s=0.6/0.4 T=2 image 255x251 kernel 245x237  spot gpu=46.239676 py=46.239675  direct 1.33e-5 (49 ms)  fft N=256x256 parts 4 1.43e-5 (67 ms)
+PASS best_of_call  rho= 0.5 s=0.3/0.3 T=1 image 259x259 kernel 233x233  spot gpu=21.619189 py=21.619191  direct 8.13e-6 (105 ms)  fft N=512x512 parts 4 4.72e-6 (218 ms)
+PASS best_of_call  rho=-0.3 s=0.25/0.35 T=1 image 239x235 kernel 211x215  spot gpu=13.165042 py=13.165040  direct 3.09e-6 (82 ms)  fft N=256x256 parts 3 4.91e-6 (51 ms)
+PASS best_of_call  rho=-0.5 s=0.6/0.4 T=2 image 255x251 kernel 245x237  spot gpu=60.603135 py=60.603134  direct 6.66e-6 (36 ms)  fft N=256x256 parts 4 1.88e-5 (46 ms)
+PASS worst_of_call rho= 0.5 s=0.3/0.3 T=1 image 259x259 kernel 233x233  spot gpu=8.626111 py=8.626111  direct 1.14e-6 (104 ms)  fft N=512x512 parts 4 2.50e-6 (217 ms)
+PASS spread        rho= 0.7 s=0.3/0.25 T=1 image 315x323 kernel 283x285  spot gpu=8.715687 py=8.715681  direct 4.81e-6 (303 ms)  fft N=512x512 parts 4 1.50e-5 (232 ms)
+PASS call_x_put    rho= 0.0 s=0.25/0.2 T=1 image 231x241 kernel 205x207  spot gpu=0.503942 py=0.503941  direct 2.99e-7 (120 ms)  fft N=256x256 parts 1 2.94e-6 (25 ms)
+without the numeraire split, the FFT on best_of_call s=0.6/0.4 T=2 (payoff up to 26930): 1.03e-3
+
+2D wraparound: image zero except its last row and column (= 100), flat kernel;
+outputs off the patch's last row and column can't reach them, so must be 0
+PASS image 259x259 padded N=512x512 >= image: max |blur| there 2.56e-8
+PASS image 259x259 one size short N=256x512: max |blur| there 7.93e-3  (leak caught, as it should be)
+PASS image 259x259 one size short N=512x256: max |blur| there 7.93e-3  (leak caught, as it should be)
+PASS image 273x289 padded N=512x512 >= image: max |blur| there 3.68e-8
+PASS image 273x289 one size short N=256x512: max |blur| there 2.51e-2  (leak caught, as it should be)
+PASS image 273x289 one size short N=512x256: max |blur| there 6.49e-2  (leak caught, as it should be)
+PASS image 231x241 padded N=256x256 >= image: max |blur| there 5.05e-8
+PASS image 231x241 one size short N=128x256: max |blur| there 7.15e-2  (leak caught, as it should be)
+PASS image 231x241 one size short N=256x128: max |blur| there 1.04e-1  (leak caught, as it should be)
+
+all GPU results within 1e-4 of the Python reference
+
+PASS
+
+== /bench2d.html?quick=1 (SwiftShader; timings say nothing about a real GPU) ==
+GPU: google swiftshader
+exchange option, S1 = S2 = 100, vols 30%/30%, rho = 0.5, r = 5%; kernel +-6 sd
+a run prices an O x O patch of spot pairs spanning +-0.5 in ln S1 and ln S2 (S/1.65 to 1.65 S);
+the kernel size m is set by the maturity (m = 1025 at O = 511 is about 4 months);
+times are ms per run, GPU work only
+(payoff and kernel uploaded once; the FFT transforms its kernels every run).
+
+O = 31 (961 prices)   m x m      N   parts   direct ms     fft ms   direct/fft   |fft-direct|
+                             9     64   4       2.60       5.90        0.44   2.3e-5
+                            17     64   3       2.70       5.70        0.47   3.0e-5
+                            33     64   3       3.30       5.70        0.58   3.0e-5
+                            65    128   3      12.10      13.30        0.91   3.0e-5
+  FFT never caught up in this sweep
+
+O = 63 (3,969 prices)   m x m      N   parts   direct ms     fft ms   direct/fft   |fft-direct|
+                             9    128   3       2.30      13.70        0.17   3.8e-5
+                            17    128   3       4.20      13.20        0.32   3.1e-5
+                            33    128   3      13.20      14.40        0.92   3.0e-5
+                            65    128   3      60.10      14.50        4.14   3.0e-5
+  crossover: FFT faster from m ~ 34 taps per side
+
+crossover m* (kernel taps per side) by patch size:
+  O =   31   m* = none
+  O =   63   m* = 34
+
+prices/sec on the fixture grid (c = 0.06, kernel 233 x 233), whole patch at once:
+  exchange           O= 33 ( 1,089 prices) direct      139 ms    7.8k/s   fft      186 ms    5.9k/s   fft end to end      233 ms   |fft-direct| 1.5e-5
+  best-of call K=100 O= 33 ( 1,089 prices) direct      147 ms    7.4k/s   fft      178 ms    6.1k/s   fft end to end      238 ms   |fft-direct| 1.5e-5
+
+all FFT results within 1e-4 of direct
+
+PASS

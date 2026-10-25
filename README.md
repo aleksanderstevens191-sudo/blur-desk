@@ -10,6 +10,7 @@ An option's price is its payoff, blurred. Blurring an image and pricing an optio
 - **Black-Scholes:** the same blur in log-price, with the blur nudged slightly off-center by the interest-rate drift, then discounted.
 - **American options:** blur one small time step, discount, clip to the payoff, repeat.
 - **Crashes and the smile:** swap the Gaussian for a kernel with fat tails (Merton jumps, variance gamma) and the same blur prices a market that can jump. Read the prices back as Black-Scholes vols and out comes the volatility smile, fitted here to real SPY options.
+- **Two stocks:** blur a payoff drawn on S1 × S2 with an ellipse that the correlation tilts, and out come exchange, best-of and spread options (within 2e-7 of Margrabe, Stulz and QuantLib).
 - **The market's odds:** run the edge-detect kernel `[1, -2, 1]` across a row of call prices and out comes the probability distribution the market is pricing (Breeden–Litzenberger, 1978).
 
 **Try it:** https://blur-desk.vercel.app · **Watch:** [the 15-second clip](docs/blur-desk-15s.mp4), recorded on a Mac with `/?record=1`
@@ -310,16 +311,78 @@ These are risk-neutral odds: what the prices imply, including what the market ch
 
 In the demo, **13 / MARKET ODDS** draws the density against the flat-vol lognormal, fills the tail below a 10% fall, and reads off the odds for Nov 20 or Dec 18.
 
+## Two stocks
+
+An option on two stocks is a payoff drawn on a flat sheet instead of a line. One axis is the log price of stock 1, the other the log price of stock 2. The price today is that image, blurred, which makes it a 2D blur. The blur's shape is the only new idea. Each stock's volatility sets how far the blur reaches along its own axis, and the drift nudges it off-centre so each stock's forward grows at the interest rate, as in 1D. The correlation is what tilts it.
+
+### Why correlation tilts the blur
+
+The blur is a picture of where the two prices could be at expiry. If the stocks move independently, the blur is an ellipse lined up with the axes (a circle when the vols are equal), because knowing where stock 1 went says nothing about stock 2. If they are correlated, they tend to move together: a big move up in one usually comes with a move up in the other. The likely outcomes then crowd along the diagonal, so the ellipse turns towards the line S1 = S2 and gets thinner across it. Negative correlation turns it the other way, onto S1 = 1/S2. At the panel's defaults (vols 30% and 25%), the major axis sits at +39° when ρ = 0.9 and at −39° when ρ = −0.9.
+
+That tilt is the whole story of the exchange option (the right to swap stock 2 for stock 1, worth max(S1 − S2, 0)). Its payoff has its kink exactly on the diagonal. The option is only worth something if the two prices end up apart. When the blur lies along the diagonal, less of it spills across the kink, so the option is worth less. With 30% and 25% vols over a year, the value falls at every step from **21.14 at ρ = −0.9 to 5.27 at ρ = +0.9** (4.0x). The blur matches Margrabe's formula and QuantLib to 2.7e-8 across the sweep.
+
+![The exchange option's value against the correlation: the blur on top of Margrabe's formula](docs/exchange_vs_rho.png)
+
+The blur runs on a grid whose step is a fixed fraction of each stock's sd *given the other*, s_i √(T(1 − ρ²)). That keeps the thin side of a tilted ellipse resolved. The payoff's kinks get Euler–Maclaurin corrections on both axes, which makes the error fourth order in the step (`reference/blur2d.py`).
+
+### Accuracy
+
+| Check | Result | Source |
+| --- | --- | --- |
+| Exchange option vs Margrabe, 24 cases, ρ from −0.9 to 0.95 | max **2.6e-8** (tolerance 1e-6) | `reference/blur2d_results.txt` |
+| Call on the better of two stocks vs Stulz, 72 cases | max **5.1e-8** (1e-6) | same |
+| ρ = 0: a product payoff f1(S1) f2(S2) vs the product of two 1D blur prices, 16 cases | max **2.2e-11** (1e-10) | same |
+| QuantLib 1.44 Margrabe and Stulz engines, 60 random markets × 3 contracts (exchange, best-of, worst-of) | max **1.4e-7** (1e-6) | same |
+| Spread call vs the exact 1D integral (condition on stock 2) | max 2.6e-8 | `reference/intuition_2d_results.txt` |
+| GPU vs Python, 10 fixtures × 25 prices, direct / FFT | worst **1.33e-5 / 1.63e-5** (1e-4) | `reference/twostock_gpu_mac.txt` (Mac) |
+| The demo's panel 14, 11 states (presets, ρ ±0.9, vols 60/40, both methods, a painted payoff) | vs closed form ≤ **7.9e-6**, GPU vs 64-bit ≤ 1.2e-5 | `src/test-demo-2d.mjs` (software GPU) |
+
+The GPU's 2D FFT needed one trick. In 32-bit floats an FFT's error scales with the largest value in the image, and a payoff like max(S1, S2) − K reaches thousands in the far corner. A plain FFT missed 1e-4 (8.1e-4 on the Mac). The fix splits the payoff by numeraire. Every pixel is measured in whichever of cash, stock 1, stock 2 or both makes it smallest, so each part stays small. Each part is blurred with its kernel tilted to match, and the parts are added back. The FFT is padded so the circular wrap can't reach the patch. `/check.html?only=2d` proves the padding matters: an image that is zero except its last row and column, blurred with a flat kernel, must leave zeros everywhere else. With one FFT size too few in either direction it leaks 7.9e-3 to 0.1, and every one of those runs is caught.
+
+### Speed on the Mac (Apple GPU, Metal-3, `/bench2d.html`)
+
+The 2D FFT starts beating the direct blur once the kernel is **41 to 54 taps per side** (for patches of 63 to 511 spots per side). Any long-dated option on a fine grid is past that: the fixture grid's kernel is 233 taps per side.
+
+| Patch of spot pairs × kernel | Direct | FFT | Note |
+| --- | ---: | ---: | --- |
+| 255 × 255 spots, 257 × 257 taps | 28.4 ms, 2.3M prices/s | 1.26 ms, **51.6M prices/s** | 22.5x |
+| 511 × 511 spots, 257 × 257 taps | 103.8 ms, 2.5M/s | 5.69 ms, 45.9M/s | 18.3x |
+| Fixture grid (233 × 233 taps, T = 1), 65 × 65 spots | 4.14 ms, 1.02M/s | 1.22 ms, 3.45M/s | 19 ms end to end |
+
+A price here is one exchange option at one pair of spot prices. FFT and direct agree within 6e-5 everywhere in the sweep. The source is `reference/bench2d_apple.json` (commit 146393d). The FFT's patch stays within ±0.5 in log price of the spot: the numeraire split's undo factor grows away from the spot, and at ±2 the corners missed 1e-4 (2.3e-4).
+
+### Spread options and Kirk's approximation
+
+A spread call pays max(S1 − S2 − K, 0). It has no closed form, and traders use Kirk's approximation, which treats S2 + K as one lognormal stock. The blur prices the spread exactly, and so does a 1D integral that conditions on stock 2, so we can measure where Kirk goes wrong (`reference/intuition_2d.py`).
+
+![Kirk's error against strike, one line per correlation](docs/kirk_error.png)
+
+- At K = 0, Kirk is exact (it reduces to Margrabe).
+- For K > 0, Kirk overprices out-of-the-money spreads, by more as K grows.
+- It does best near ρ = 0.5 at these vols, and worst at high correlation with a large strike. At ρ = 0.95 it is 1.3% too high by K = 10 and 98% too high at K = 50. At ρ = 0.9 it passes 1% at K = 17.5.
+- When stock 2 is the more volatile (25% / 50%), it passes 1% by K = 7.5 to 15 at every correlation.
+
+### In the demo
+
+**14 / TWO STOCKS** has these controls:
+- **Paint canvas:** paint any payoff on the S1 × S2 sheet, or pick Exchange, Best-of or Spread.
+- **Blur views:** the kernel's 1, 2 and 3 sd ellipses sit over the paint canvas, and a 3D wireframe of the blur sits beside it. Both turn and stretch as you move the correlation.
+- **Sliders:** both vols, the correlation, the maturity and the strike.
+
+Every move reprices a 25 × 25 patch of spot pairs on the GPU (FFT or direct). The panel shows the error at (100, 100) against Margrabe or Stulz. For the spread, it is against the exact integral, with Kirk's gap beside it. It also shows the GPU against the 64-bit blur at 9 points of the patch, which `src/test-2d.mjs` holds within 1e-9 of Python.
+
+![Panel 14 of the demo: the exchange option at ρ = 0.9, the blur's ellipses turned onto the diagonal](docs/demo_two_stocks.png)
+
 ## What GitHub Actions checks
 
 Every push runs four jobs (`.github/workflows/checks.yml`); any failure turns the run red:
 
 | Job | What it checks |
 | --- | --- |
-| Python reference | `check.py`, the three barrier checks, and for fat tails: `check_kernels.py` (the table above), `check_smile.py` (no smile from a Gaussian, flattening with maturity, the negative-jump skew), `check_calibration.py` (the synthetic chain) and `check_spy_fit.py` (re-runs the SPY fit from the committed snapshot: it must reproduce `src/spy_fit.json`, beat flat Black-Scholes at least 4 times, stay within 1 vol point of every quote and fit a negative mean jump) |
+| Python reference | `check.py`, the three barrier checks, and for fat tails: `check_kernels.py` (the table above), `check_smile.py` (no smile from a Gaussian, flattening with maturity, the negative-jump skew), `check_calibration.py` (the synthetic chain) and `check_spy_fit.py` (re-runs the SPY fit from the committed snapshot: it must reproduce `src/spy_fit.json`, beat flat Black-Scholes at least 4 times, stay within 1 vol point of every quote and fit a negative mean jump); for two stocks, `check_2d.py` (Margrabe, Stulz, the ρ = 0 product, QuantLib on 60 random markets, fourth-order convergence) and `intuition_2d.py` (the exchange value falls at every step of the correlation sweep; the spread referee and Kirk vs QuantLib) |
 | Full SPY chain | `check_chain_fit.py` reruns the whole pipeline from the saved snapshot (filters, parity forwards with early exercise, European vols, the Merton fit per expiry and the reference prices) and must reproduce the committed `stage1.json` and `src/chain_data.json` (the refit's Merton prices to within 1e-4 dollars, because least squares lands a little differently on other numpy and scipy builds; the committed prices must follow exactly from the committed fit); `chain_oos.py --check` must reproduce every out-of-sample number. About 4 minutes |
-| JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves) `test-chain.mjs` (the whole chain's jobs vs QuantLib and Merton's series) and `test-odds.mjs` (the market's odds), then a build of every page |
-| WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, the fat-tailed kernels and smile, the whole SPY chain in one submit, and the market's odds, all in 32-bit floats within 1e-4 of Python |
+| JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves) `test-chain.mjs` (the whole chain's jobs vs QuantLib and Merton's series) `test-odds.mjs` (the market's odds) and `test-2d.mjs` (the 2D blur vs Python to 1e-9, the 2D FFT vs direct, the wraparound sentinel), then a build of every page |
+| WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, the fat-tailed kernels and smile, the whole SPY chain in one submit, the market's odds and the two-stock fixtures (direct and 2D FFT, with the wraparound test), all in 32-bit floats within 1e-4 of Python; then `src/test-demo-2d.mjs` drives the demo's panel 14 through 11 states and needs every live error under 1e-4 |
 
 ## Layout
 
@@ -374,6 +437,15 @@ reference/chain_bench_report.py    the benchmark table from the QuantLib and GPU
 src/chain.js                       every contract as dot-product jobs; the shader; one submit
 src/chain-check.js, test-chain.mjs the chain on the GPU (/check.html?only=chain) and in 64-bit JS
 src/chain-bench.js, chain-bench.html  the chain benchmark: compute only and end to end
+reference/blur2d.py                two stocks: the 2D blur, kink corrections, Margrabe, Stulz, the bivariate normal
+reference/check_2d.py              the two-stock checks: blur2d_results.txt
+reference/intuition_2d.py          exchange value vs correlation, spread vs Kirk: intuition_2d_results.txt and the plots
+reference/make_2d_fixtures.py      writes src/fixtures_2d.json
+src/blur2d.js, src/fft2d.js        the 2D blur and its FFT plan (numeraire split) in 64-bit JS
+src/gpu2d.js                       WGSL: the direct 2D blur and the 2D FFT
+src/check-2d.js, test-2d.mjs       the 2D fixtures on the GPU (/check.html?only=2d) and in 64-bit JS
+src/bench2d.js, bench2d.html       direct vs 2D FFT benchmark, crossover sweep
+src/twostock.js, test-demo-2d.mjs  the demo's panel 14, and its headless check
 .github/workflows/checks.yml       CI: every Python check, every JS test, the build and the GPU check page, on every push
 ```
 
@@ -397,6 +469,9 @@ node src/test-fft.mjs
 node src/test-kernels.mjs
 node src/test-chain.mjs
 node src/test-odds.mjs
+python3 reference/check_2d.py
+python3 reference/intuition_2d.py
+node src/test-2d.mjs
 
 npm install
 npm run dev        # open the printed URL in a WebGPU browser (Chrome, Edge, Safari 26)
@@ -404,14 +479,16 @@ npm run dev        # open the printed URL in a WebGPU browser (Chrome, Edge, Saf
                    # /?record=1   the 15-second clip in a 1080 x 1080 frame (space plays, R resets;
                    #              &autoplay=1 starts when ready, &scale=0.5 for 1080 device px on a 2x screen)
                    # /check.html  the GPU vs Python fixture check
-                   #              (?only=fixtures, fft, kernels, chain or odds for one section)
+                   #              (?only=fixtures, fft, kernels, chain, odds or 2d for one section)
                    # /bench.html  the barrier benchmark
                    # /fft-bench.html  FFT vs direct blur, crossover sweep
                    # /chain-bench.html  the whole SPY chain: GPU compute only and end to end
+                   # /bench2d.html  two stocks: direct vs 2D FFT, crossover and prices/sec
 
 npm run build
 npm i --no-save playwright && npx playwright install chromium
 node src/test-gpu.mjs   # /check.html in headless Chromium on a software GPU, as CI runs it
+node src/test-demo-2d.mjs   # the demo's two-stock panel, driven headless
 ```
 
 ## The rest of the week

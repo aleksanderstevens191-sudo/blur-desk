@@ -107,8 +107,31 @@ On the Dec 18 panel the market-implied density peaks near $785. It sits above th
 
 Panel 13 on blur-desk.vercel.app showed the same Dec 18 read-offs on the Mac (7.6%, 2.9%, 3.0%, sums to 1.0000, mean $768.11 = forward $768.11), in 37 ms, and in 17 ms in the clip.
 
+## Two stocks (Part 3, panel 14)
+
+Commits are on branch `part3-2d` until it merges. Market for the panel and the sweep: S1 = S2 = 100, vols 30% / 25%, 1 year, r = 5%.
+
+| # | What | Value | Machine | Source |
+| --- | --- | --- | --- | --- |
+| T1 | Exchange option, 2D blur vs Margrabe, 24 cases (ρ −0.9 to 0.95) | max **2.6e-8** | ⚠ cloud (numpy, 64-bit) | `reference/blur2d_results.txt` (ab28520) |
+| T2 | Call on the better of two stocks vs Stulz, 72 cases | max **5.1e-8** | ⚠ cloud | same |
+| T3 | ρ = 0: product payoff vs product of two 1D prices, 16 cases | max 2.2e-11 | ⚠ cloud | same |
+| T4 | vs QuantLib 1.44 Margrabe and Stulz engines, 60 random markets × exchange, best-of, worst-of | max **1.4e-7** | ⚠ cloud | same |
+| T5 | GPU vs Python, 10 fixtures × 25 prices, direct / 2D FFT | worst **1.33e-5 / 1.63e-5** | Mac, 2026-10-24 | `reference/twostock_gpu_mac.txt` (146393d) |
+| T6 | The same 2D FFT without the numeraire split | 8.1e-4 (fails 1e-4) | Mac | same |
+| T7 | Wraparound test: padded leak / one FFT size short | ≤ 8.5e-8 / 7.9e-3 to 0.1, all 6 caught | Mac | same |
+| T8 | Where the 2D FFT starts beating direct | **41 to 54 taps per side** (patches of 63 to 511 spots per side) | Mac | `reference/bench2d_apple.json` (146393d) |
+| T9 | Peak 2D FFT, 255 × 255 spots, 257 × 257 taps, GPU compute only | 1.26 ms = **51.6M prices/sec** (direct 2.3M/sec, 22.5x) | Mac | same |
+| T10 | Fixture grid (233 × 233 taps, T = 1), 65 × 65 spots: direct / FFT / FFT end to end | 1.02M/sec / **3.45M/sec** / 19.2 ms | Mac | same |
+| T11 | Exchange value from ρ = −0.9 to +0.9, falling at every step | **21.14 → 5.27** (4.0x), blur vs Margrabe ≤ 2.7e-8 | ⚠ cloud | `reference/intuition_2d_results.txt` (a1d80b7), `docs/exchange_vs_rho.png` |
+| T12 | Kirk vs the exact spread, ρ = 0.95: K = 10 / K = 50 | **+1.3% / +98%** too high | ⚠ cloud | same, `docs/kirk_error.png` |
+| T13 | Kirk passes 1% of the price, ρ = 0.9 / when stock 2 is the more volatile (25% / 50%) | K = 17.5 / K = 7.5 to 15 at every ρ | ⚠ cloud | same |
+| T14 | Demo panel 14, 11 states: GPU at (100, 100) vs Margrabe / Stulz / exact spread | ≤ **7.9e-6**; GPU vs 64-bit blur ≤ 1.2e-5 | ⚠ cloud (SwiftShader) | `src/test-demo-2d.mjs` (CI) |
+| T15 | Demo panel 14's ellipse at ρ = +0.9 / −0.9 | +39° / −39° | any (geometry) | `docs/demo_two_stocks.png` |
+
 ## Still to measure on the Mac
 
 1. QuantLib barriers on all cores, if you want a barrier ratio against all cores (Q3).
+2. Panel 14 on the Mac (T14): the live errors and the reprice time. Open the demo, scroll to 14 / TWO STOCKS and read the numbers off the panel.
 
 Done on 2026-10-24: `/check.html?only=fixtures` (A8, A9, B4) and `/check.html?only=odds` (O1–O8), both all PASS, the demo's top bar and error counter (A2, A10, C7, C10) from Alek's screen recording, and the 15-second clip from `/?record=1` (A7, `docs/blur-desk-15s.mp4`).
