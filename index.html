@@ -88,6 +88,15 @@
       #smile { height: 192px; }
       #chain { height: 300px; }
       #odds { height: 220px; }
+      .ts { display: grid; grid-template-columns: 1fr 1fr 0.85fr; gap: 8px; }
+      #tsPaint { height: 300px; cursor: crosshair; touch-action: none; }
+      #tsSurf { height: 300px; }
+      .ts .side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .ts .side .rel { height: 44px; }
+      .ts .side .foot { white-space: normal; }
+      .ts .side .foot b.good { color: var(--green); }
+      .ts .side .foot b.bad { color: var(--red); }
+      @media (max-width: 820px) { .ts { grid-template-columns: 1fr; } }
       .read { position: absolute; left: 10px; top: 20px; max-width: 37%; font-size: 15px; font-weight: 700; line-height: 1.25; letter-spacing: 0.02em; pointer-events: none; }
       .read b { color: var(--amber); font-variant-numeric: tabular-nums; }
       .read small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; font-weight: 500; letter-spacing: 0.04em; }
@@ -326,11 +335,43 @@
             </div>
             <div class="foot wrap"><span id="fOd1">—</span><span id="fOd2"></span></div>
           </div>
+          <div class="panel full" id="tsPanel">
+            <h3>14 / TWO STOCKS <em id="tsTag">—</em></h3>
+            <div class="ts">
+              <canvas id="tsPaint" aria-label="Paint a payoff on two stocks; the kernel's ellipses show the blur"></canvas>
+              <canvas id="tsSurf" aria-label="The blur: the kernel density over the two log prices, turning with the correlation"></canvas>
+              <div class="side">
+                <div class="rel"><div class="big na" id="tsErr">—</div></div>
+                <div class="foot"><span id="tsVs">—</span><span>GPU <b id="tsPrice">—</b></span></div>
+                <div class="foot"><span id="tsCf">—</span><span id="tsKirk"></span></div>
+                <div class="chips" role="group" aria-label="Two-stock payoff">
+                  <button data-ts="exchange" aria-pressed="true">EXCHANGE</button>
+                  <button data-ts="best">BEST-OF</button>
+                  <button data-ts="spread">SPREAD</button>
+                  <button data-ts="paint">PAINT</button>
+                </div>
+                <label class="sl jump"><span>VOL 1 <b id="tsV1"></b></span><input type="range" id="tsS1" min="10" max="60" step="1" value="30" /></label>
+                <label class="sl jump"><span>VOL 2 <b id="tsV2"></b></span><input type="range" id="tsS2" min="10" max="60" step="1" value="25" /></label>
+                <label class="sl jump"><span>CORRELATION <b id="tsRho"></b></span><input type="range" id="tsR" min="-0.9" max="0.9" step="0.05" value="0.5" /></label>
+                <label class="sl jump"><span>MATURITY <b id="tsT"></b></span><input type="range" id="tsTm" min="0.25" max="2" step="0.25" value="1" /></label>
+                <label class="sl jump"><span>STRIKE K <b id="tsKv"></b></span><input type="range" id="tsK" min="0" max="40" step="0.5" value="5" /></label>
+                <div class="row even">
+                  <div class="chips two" role="group" aria-label="GPU method">
+                    <button data-tsm="fft" aria-pressed="true">FFT</button>
+                    <button data-tsm="direct">DIRECT</button>
+                  </div>
+                  <button class="toggle" id="tsClear" disabled>CLEAR</button>
+                </div>
+                <div class="foot"><span id="tsGpu">—</span></div>
+                <div class="foot"><span id="tsHow">—</span></div>
+              </div>
+            </div>
+          </div>
         </section>
       </div>
       <div class="note">
         <span id="noteL">STRIKE 100 · RATE 5% · BLACK-SCHOLES, PRICED BY A GAUSSIAN BLUR ON THE GPU (WEBGPU)</span>
-        <span><a href="./check.html">GPU vs PYTHON CHECK →</a> &nbsp; <a href="./bench.html">BARRIER BENCHMARK →</a> &nbsp; <a href="./chain-bench.html">CHAIN BENCHMARK →</a></span>
+        <span><a href="./check.html">GPU vs PYTHON CHECK →</a> &nbsp; <a href="./bench.html">BARRIER BENCHMARK →</a> &nbsp; <a href="./chain-bench.html">CHAIN BENCHMARK →</a> &nbsp; <a href="./bench2d.html">TWO-STOCK BENCHMARK →</a></span>
       </div>
     </main>
     <script type="module" src="/src/demo.js"></script>
