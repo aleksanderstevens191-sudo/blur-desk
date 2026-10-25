@@ -22,6 +22,7 @@ const st = { preset: "exchange", s1: 0.3, s2: 0.25, rho: 0.5, T: 1, K: { best: 1
 const paint = new Float32Array(G * G); // dollars at cell (i, j): i along ln S1, j along ln S2
 let res = null; // the last reprice
 let busy = false, again = false, gpuOK = true;
+let asked = 0, failure = null; // reprices requested; the last one that threw
 
 // ---------- payoffs ----------
 
@@ -85,6 +86,7 @@ function closedForm() {
 // ---------- the reprice ----------
 
 async function reprice() {
+  asked++;
   if (busy) {
     again = true;
     return;
@@ -93,6 +95,8 @@ async function reprice() {
   try {
     do {
       again = false;
+      const seq = asked;
+      const state = JSON.parse(JSON.stringify(st));
       const { s1, s2, rho, T } = st;
       const payoff = st.preset === "paint" ? paintedPayoff() : presetPayoff();
       const t0 = performance.now();
@@ -110,10 +114,12 @@ async function reprice() {
       // the 64-bit blur at the spot, the patch's corners and its edge midpoints
       let worst = 0;
       for (const a of [0, Q, 2 * Q]) for (const b of [0, Q, 2 * Q]) worst = Math.max(worst, Math.abs(job.disc * out[a * job.oy + b] - priceAt(job, a, b)));
-      res = { spot: job.disc * out[Q * job.oy + Q], worst, ms, N, parts, taps: [job.mx, job.my], dx: job.dx, dy: job.dy, cf: closedForm(), method: gpuOK ? st.method : "cpu" };
+      res = { spot: job.disc * out[Q * job.oy + Q], worst, ms, N, parts, taps: [job.mx, job.my], dx: job.dx, dy: job.dy, cf: closedForm(), method: gpuOK ? st.method : "cpu", seq, state };
+      failure = null;
       readout();
     } while (again);
   } catch (e) {
+    failure = { seq: asked, message: e.message };
     $("tsTag").textContent = e.message.toUpperCase();
   } finally {
     busy = false;
@@ -397,4 +403,13 @@ export function initTwoStock({ gpu = true } = {}) {
 }
 
 // for the headless check: the current state and the last result
-window.twoStock = { st, get res() { return res; }, setPreset, reprice };
+// (res.seq === asked with busy false: the result answers the latest request)
+window.twoStock = {
+  st,
+  get res() { return res; },
+  get asked() { return asked; },
+  get busy() { return busy; },
+  get failure() { return failure; },
+  setPreset,
+  reprice,
+};

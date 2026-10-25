@@ -28,22 +28,27 @@ const set = async (id, v) =>
     },
     v,
   );
-// wait until the reprices stop changing (the panel keeps only the latest request)
-const settle = async () => {
-  let last = null;
-  for (;;) {
-    await page.waitForTimeout(700);
-    const r = await page.evaluate(() => JSON.stringify([window.twoStock.res.spot, window.twoStock.res.ms]));
-    if (r === last) break;
-    last = r;
-  }
-};
+// wait until the panel has answered the latest request, or failed on it
+const settle = () =>
+  page.waitForFunction(
+    () => {
+      const t = window.twoStock;
+      return !t.busy && (t.failure || (t.res && t.res.seq === t.asked));
+    },
+    null,
+    { timeout: 600e3, polling: 200 },
+  );
 const row = async (what) => {
   await settle();
+  const failure = await page.evaluate(() => window.twoStock.failure);
+  if (failure) {
+    console.log(`FAIL ${what}: the reprice threw: ${failure.message}`);
+    return false;
+  }
   const r = await page.evaluate(() => {
     const t = window.twoStock,
       r = t.res;
-    return { st: JSON.parse(JSON.stringify(t.st)), spot: r.spot, cf: r.cf, worst: r.worst, ms: r.ms, N: r.N, parts: r.parts, taps: r.taps, method: r.method };
+    return { st: r.state, spot: r.spot, cf: r.cf, worst: r.worst, ms: r.ms, N: r.N, parts: r.parts, taps: r.taps, method: r.method };
   });
   const err = r.cf ? Math.abs(r.spot - r.cf.v) : null;
   const k = r.st.preset === "best" ? ` K=${r.st.K.best}` : r.st.preset === "spread" ? ` K=${r.st.K.spread}` : "";
