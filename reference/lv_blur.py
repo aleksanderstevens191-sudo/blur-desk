@@ -72,7 +72,7 @@ class LVTable:
         return np.interp(x, self.k, self.row(t))
 
     @classmethod
-    def from_surface(cls, S, dk=0.005, per=8, k_lo=-3.0, k_hi=1.5, fine=(-0.4, 0.3, 0.001)):
+    def from_surface(cls, S, dk=0.005, per=8, k_lo=-5.0, k_hi=3.5, fine=(-0.4, 0.3, 0.001)):
         """Tabulate Stage 2's regularized local vol: `per` times per expiry interval (cell centres); k every
         dk, and every fine[2] on [fine[0], fine[1]] where the shortest expiries live (a 3-day expiry's
         standard deviation is about 0.01 in k)."""

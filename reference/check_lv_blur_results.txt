@@ -1,0 +1,130 @@
+Stage 3: pricing under local vol by blurring with a width that changes from spot to spot (spy_full_2026-10-23, 32 expiries, 3320 OTM quotes). Python float64.
+Settings reported: time steps <= 1 day and at least 32 per expiry interval, grid step dx = 0.0008 in ln(S/F) on [-4.0, 2.5], kernels to 8 standard deviations.
+
+1. Constant local vol against Black-Scholes (dollars: D_T F_T times the forward-unit price; SPY's
+   forwards and discount factors; strikes 0.6 F .. 1.4 F every 0.05 F, calls and puts; grid out to
+   8 standard deviations of ln S at the last expiry each way, and at least the production grid)
+   vol 15%     3.0d  F $760.66  max |error| forward pass $9.3e-13 (34 options), backward $3.8e-13 (6)
+   vol 15%    28.0d  F $763.05  max |error| forward pass $2.4e-12 (34 options), backward $1.7e-13 (6)
+   vol 15%   342.0d  F $788.97  max |error| forward pass $1.6e-11 (34 options), backward $4.8e-12 (6)
+   vol 15%   819.0d  F $835.63  max |error| forward pass $2.4e-11 (34 options), backward $8.7e-12 (6)
+   vol 40%     3.0d  F $760.66  max |error| forward pass $5.1e-13 (34 options), backward $1.3e-12 (6)
+   vol 40%    28.0d  F $763.05  max |error| forward pass $9.5e-13 (34 options), backward $6.8e-13 (6)
+   vol 40%   342.0d  F $788.97  max |error| forward pass $2.0e-11 (34 options), backward $1.0e-11 (6)
+   vol 40%   819.0d  F $835.63  max |error| forward pass $6.5e-11 (34 options), backward $3.4e-11 (6)
+   worst $6.5e-11 against the 1e-6 requirement: PASS
+
+2. Forward pass against backward pass under the local vol (the scatter is the transpose of the gather)
+   6 options at 3.0d and 7.0d: max |forward - backward| $9.0e-13
+
+   (heavy runs: 11 forward passes in 1469 s on 4 processes; production run 456 s)
+
+3. Round trip: OTM quotes priced under the local vol, back to implied vol, minus the Stage 1 surface
+   (vol points). Liquid = mid >= $0.50; requirement 0.1 vol points there.
+   expiry          days  liquid  max    rms     $max   | all quotes  max   (k range)    | rejected fill max
+   2026-10-26     3.0     19  0.027  0.016   0.0057  |    75   0.514  (-0.17..+0.03)  |   0.048
+   2026-10-27     4.0     29  0.023  0.013   0.0054  |    82   0.114  (-0.21..+0.03)  |   0.091
+   2026-10-28     5.0     42  0.021  0.011   0.0054  |    95   0.097  (-0.28..+0.05)  |   0.184
+   2026-10-29     6.0     53  0.019  0.010   0.0054  |   101   0.111  (-0.31..+0.06)  |   0.274
+   2026-10-30     7.0     63  0.016  0.009   0.0054  |   211   0.930  (-0.47..+0.08)  |   0.368
+   2026-11-02    10.0     62  0.013  0.008   0.0057  |   112   0.092  (-0.33..+0.09)  |   0.486
+   2026-11-03    11.0     66  0.012  0.008   0.0056  |   102   0.053  (-0.26..+0.09)  |   0.623
+   2026-11-04    12.0     71  0.012  0.008   0.0058  |   104   0.081  (-0.33..+0.06)  |   0.887
+   2026-11-05    13.0     18  0.011  0.007   0.0056  |    24   0.011  (-0.08..+0.09)  |   0.468
+   2026-11-06    14.0     87  0.019  0.008   0.0057  |   146   0.132  (-0.42..+0.10)  |   1.630
+   2026-11-13    21.0    104  0.061  0.019   0.0096  |   145   0.102  (-0.42..+0.12)  |   1.662
+   2026-11-20    28.0    132  0.070  0.021   0.0113  |   195   0.498  (-0.93..+0.15)  |   1.423
+   2026-11-27    35.0    109  0.061  0.020   0.0116  |   129   0.091  (-0.42..+0.19)  |   1.130
+   2026-11-30    38.0    177  0.061  0.020   0.0112  |   203   0.087  (-0.47..+0.18)  |   1.185
+   2026-12-04    42.0    118  0.060  0.019   0.0114  |   130   0.069  (-0.42..+0.16)  |   1.135
+   2026-12-18    56.0    168  0.073  0.022   0.0151  |   217   0.293  (-1.34..+0.26)  |   0.857
+   2026-12-31    69.0    173  0.067  0.020   0.0163  |   190   0.067  (-0.51..+0.21)  |   0.784
+   2027-01-15    84.0     79  0.071  0.027   0.0158  |   112   0.236  (-1.70..+0.27)  |   0.632
+   2027-01-29    98.0     81  0.043  0.015   0.0173  |    84   0.043  (-0.46..+0.16)  |   0.355
+   2027-02-19   119.0     65  0.056  0.021   0.0191  |    68   0.056  (-0.65..+0.17)  |   0.501
+   2027-02-26   126.0     59  0.027  0.010   0.0187  |    61   0.027  (-0.36..+0.16)  |   0.182
+   2027-03-19   147.0     85  0.062  0.022   0.0187  |    96   0.110  (-1.13..+0.39)  |   0.552
+   2027-03-31   159.0     66  0.055  0.014   0.0185  |    67   0.055  (-0.79..+0.17)  |   0.472
+   2027-06-17   237.0     84  0.058  0.017   0.0230  |    95   0.126  (-1.36..+0.61)  |   0.475
+   2027-06-30   250.0     51  0.017  0.007   0.0227  |    52   0.017  (-0.41..+0.22)  |   0.114
+   2027-09-17   329.0     79  0.048  0.013   0.0240  |    86   0.069  (-1.37..+0.57)  |   0.569
+   2027-09-30   342.0     32  0.010  0.007   0.0233  |    32   0.010  (-0.37..+0.22)  |   0.082
+   2027-12-17   420.0     95  0.040  0.012   0.0232  |   103   0.046  (-1.49..+0.61)  |   0.545
+   2028-01-21   455.0     67  0.035  0.011   0.0227  |    73   0.048  (-1.74..+0.60)  |   0.440
+   2028-06-16   602.0     35  0.033  0.010   0.0216  |    39   0.033  (-1.54..+0.60)  |   0.515
+   2028-12-15   784.0     54  0.028  0.008   0.0203  |    56   0.123  (-2.81..+0.57)  |   0.436
+   2029-01-19   819.0     34  0.022  0.007   0.0202  |    35   0.083  (-2.63..+0.52)  |   0.258
+   liquid (2457 quotes): max 0.073, rms 0.017, 95th pct 0.041 vol points; over 0.1: 0.0%  -> PASS
+   all quotes (3320, incl. sub-50c wings): max 0.930, rms 0.052; NaN (price outside bounds) 0
+   rejected wing fill (Stage 2 first version): liquid max 1.662, rms 0.219, over 0.1: 23.8%
+   error map: docs/lv_roundtrip.png
+
+4. QuantLib 1.44 FdBlackScholesVanillaEngine(localVol=True, Crank-Nicolson, 4 damping steps) on
+   the same local-vol table (FixedLocalVolSurface), spot 1 and zero rates (forward units), 39 contracts at 8 expiries
+   (whole days), 5 liquid OTM strikes each; dollars = D_T F_T x forward units. QuantLib at 2000 time x 2000 space
+   steps; its own change from the coarser grid shows how far it is converged.
+   days    k      type   QuantLib $   blur $      diff $    vol pts  | blur at half the step, vs QL | QL grid change
+      3  -0.014  put       0.5283      0.5257   -0.00269  -0.0197  |  -0.0159                    |  -0.0003
+      3  -0.010  put       0.8628      0.8605   -0.00221  -0.0121  |  -0.0103                    |  -0.0001
+      3  +0.000  call      2.8647      2.8685   +0.00386  +0.0141  |  +0.0050                    |  -0.0001
+      3  +0.010  call      0.5782      0.5822   +0.00400  +0.0243  |  +0.0096                    |  -0.0011
+      7  -0.043  put       0.8954      0.8892   -0.00623  -0.0393  |  -0.0442                    |  +0.0037
+      7  -0.022  put       2.1902      2.1821   -0.00811  -0.0277  |  -0.0338                    |  +0.0030
+      7  -0.000  put       6.4041      6.3977   -0.00635  -0.0151  |  -0.0233                    |  +0.0021
+      7  +0.022  call      0.8942      0.8924   -0.00179  -0.0082  |  -0.0173                    |  +0.0008
+      7  +0.024  call      0.6571      0.6556   -0.00148  -0.0081  |  -0.0173                    |  +0.0006
+     14  -0.061  put       1.6348      1.6283   -0.00645  -0.0256  |  -0.0405                    |  -0.0101
+     14  -0.030  put       3.3979      3.3894   -0.00853  -0.0201  |  -0.0367                    |  -0.0086
+     14  +0.000  call      9.0621      9.0517   -0.01039  -0.0175  |  -0.0327                    |  -0.0077
+     14  +0.030  call      1.1466      1.1409   -0.00573  -0.0191  |  -0.0327                    |  -0.0081
+     14  +0.036  call      0.6231      0.6190   -0.00411  -0.0197  |  -0.0340                    |  -0.0086
+     28  -0.083  put       2.6806      2.6696   -0.01106  -0.0289  |  -0.0428                    |  -0.0111
+     28  -0.042  put       5.0973      5.0869   -0.01035  -0.0169  |  -0.0355                    |  -0.0085
+     28  -0.000  put      12.6121     12.6031   -0.00906  -0.0108  |  -0.0305                    |  -0.0065
+     28  +0.042  call      1.4017      1.3951   -0.00661  -0.0165  |  -0.0314                    |  -0.0075
+     28  +0.055  call      0.5811      0.5762   -0.00493  -0.0213  |  -0.0345                    |  -0.0088
+     56  -0.116  put       4.0371      4.0216   -0.01550  -0.0280  |  -0.0381                    |  +0.0069
+     56  -0.059  put       7.4247      7.4105   -0.01424  -0.0165  |  -0.0294                    |  +0.0050
+     56  +0.001  call     17.7431     17.7356   -0.00758  -0.0064  |  -0.0204                    |  +0.0027
+     56  +0.059  call      2.0329      2.0277   -0.00519  -0.0090  |  -0.0201                    |  -0.0001
+     56  +0.083  call      0.5859      0.5815   -0.00444  -0.0171  |  -0.0259                    |  -0.0019
+    119  -0.177  put       5.8165      5.7987   -0.01779  -0.0230  |  -0.0284                    |  +0.0087
+    119  -0.088  put      10.9472     10.9344   -0.01276  -0.0103  |  -0.0190                    |  +0.0062
+    119  +0.000  call     26.4760     26.4751   -0.00094  -0.0005  |  -0.0108                    |  +0.0037
+    119  +0.093  call      2.3000      2.2976   -0.00231  -0.0031  |  -0.0110                    |  +0.0010
+    119  +0.122  call      0.7991      0.7959   -0.00320  -0.0087  |  -0.0153                    |  +0.0002
+    250  -0.263  put       8.7060      8.6920   -0.01397  -0.0128  |  -0.0150                    |  -0.0038
+    250  -0.138  put      16.1502     16.1430   -0.00715  -0.0041  |  -0.0091                    |  -0.0026
+    250  -0.007  put      38.6056     38.6134   +0.00778  +0.0031  |  -0.0039                    |  -0.0022
+    250  +0.143  call      3.4687      3.4704   +0.00168  +0.0016  |  -0.0045                    |  -0.0058
+    250  +0.197  call      0.9056      0.9042   -0.00142  -0.0032  |  -0.0083                    |  -0.0098
+    455  -0.375  put      10.6362     10.6137   -0.02252  -0.0169  |  -0.0173                    |  -0.0096
+    455  -0.208  put      20.2194     20.2009   -0.01849  -0.0086  |  -0.0112                    |  -0.0073
+    455  -0.000  put      57.1560     57.1558   -0.00022  -0.0001  |  -0.0050                    |  -0.0042
+    455  +0.203  call      5.2518      5.2506   -0.00118  -0.0008  |  -0.0052                    |  -0.0061
+    455  +0.291  call      1.2968      1.2935   -0.00326  -0.0055  |  -0.0092                    |  -0.0124
+   blur (production) vs QuantLib: max 0.0393 vol points, max $0.0225
+   blur at half the time step vs QuantLib: max 0.0442 vol points, max $0.0256
+   QuantLib's own grid change (1000 -> 2000): max 0.0124 vol points;  QuantLib time 47 s
+
+5. Convergence: liquid-quote implied vols at each setting minus the finest one, vol points (max | rms),
+   by expiry group; then the observed order from successive differences
+   time (grid dx 0.0008):  (step <= / min steps per interval)
+     4d/8         3-7d 0.2541 | 0.1022   10-42d 0.3996 | 0.1024   56d+ 0.3368 | 0.0748   (266 s)
+     2d/16        3-7d 0.0604 | 0.0280   10-42d 0.1334 | 0.0334   56d+ 0.1207 | 0.0281   (330 s)
+     1d/32        3-7d 0.0152 | 0.0064   10-42d 0.0337 | 0.0086   56d+ 0.0335 | 0.0083   (456 s)
+     0.5d/64      3-7d 0.0000 | 0.0000   10-42d 0.0000 | 0.0000   56d+ 0.0000 | 0.0000   (540 s)
+     3-7d    rms successive differences 7.7e-02  2.3e-02  6.4e-03   observed order 1.74  1.84
+     10-42d  rms successive differences 7.0e-02  2.5e-02  8.6e-03   observed order 1.47  1.55
+     56d+    rms successive differences 4.7e-02  2.0e-02  8.3e-03   observed order 1.24  1.25
+   space (steps 1d, >= 32 per interval):
+     dx .0016     3-7d 0.0010 | 0.0003   10-42d 0.0042 | 0.0007   56d+ 0.0007 | 0.0002   (82 s)
+     dx .00113    3-7d 0.0001 | 0.0000   10-42d 0.0000 | 0.0000   56d+ 0.0000 | 0.0000   (168 s)
+     dx .0008     3-7d 0.0001 | 0.0001   10-42d 0.0001 | 0.0000   56d+ 0.0001 | 0.0000   (456 s)
+     dx .00057    3-7d 0.0000 | 0.0000   10-42d 0.0000 | 0.0000   56d+ 0.0000 | 0.0000   (951 s)
+     3-7d    rms successive differences 3.0e-04  5.8e-05  7.4e-05   observed order 4.70  -0.69
+     10-42d  rms successive differences 7.5e-04  3.9e-05  4.5e-05   observed order 8.52  -0.42
+     56d+    rms successive differences 2.1e-04  1.7e-05  1.9e-05   observed order 7.36  -0.33
+   domain: ln(S/F) on [-5, 3.5] instead of [-4.0, 2.5] (same steps and dx), change in vol points:
+        3-7d 1.1e-12 | 2.2e-13   10-42d 1.1e-12 | 1.6e-13   56d+ 8.6e-04 | 4.0e-05   (605 s)
+

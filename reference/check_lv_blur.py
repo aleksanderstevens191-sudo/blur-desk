@@ -28,7 +28,7 @@ from lv_blur import LVTable, Flat, prices_forward, price_backward, implied_w, bl
 
 FOLDER = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE.parent / "data" / "spy_full_2026-10-23"
 DAY = 1 / 365
-X_LO, X_HI = -3.0, 1.5
+X_LO, X_HI = -4.0, 2.5              # ln(S/F); -3 cost the 2-year deep puts (k = -1.7) up to 0.05 vol points
 PROD = dict(dt=1 * DAY, m=32, dx=0.0008)          # the settings the round trip is reported at
 LIQ_MID = 0.50                                    # liquid: mid price >= $0.50
 
@@ -133,7 +133,7 @@ def main():
         "x16": ("clip", PROD["dt"], PROD["m"], 0.0016, exps, ks, cl, ()),
         "x11": ("clip", PROD["dt"], PROD["m"], 0.0008 * np.sqrt(2), exps, ks, cl, ()),
         "x057": ("clip", PROD["dt"], PROD["m"], 0.0008 / np.sqrt(2), exps, ks, cl, ()),
-        "wide": ("clip", PROD["dt"], PROD["m"], D, exps, ks, cl, (), -4.0, 2.5),
+        "wide": ("clip", PROD["dt"], PROD["m"], D, exps, ks, cl, (), X_LO - 1.0, X_HI + 1.0),
     }
     # QuantLib contracts: 8 expiries in whole days, 5 liquid OTM strikes each (nearest quotes to
     # -2, -1, 0, +1, +1.5 standard deviations)
@@ -244,7 +244,6 @@ def main():
     tql = time.time() - t0
     b1 = np.concatenate(R["ql1"][0])
     b2 = np.concatenate(R["ql2"][0])
-    bR = 2 * b2 - b1                                  # Richardson on the first-order time error
     kq = np.array([c[1] for c in qc]); cq = np.array([c[2] for c in qc]); Tq = np.array([c[0] / 365 for c in qc])
     qD = np.array(qD)
     v = lambda c: vols(c, kq, cq, Tq) * 100
@@ -254,15 +253,15 @@ def main():
     print("   (whole days), 5 liquid OTM strikes each; dollars = D_T F_T x forward units. QuantLib at "
           f"{grids[-1][0]} time x {grids[-1][1]} space")
     print("   steps; its own change from the coarser grid shows how far it is converged.")
-    print("   days    k      type   QuantLib $   blur $      diff $    vol pts  | blur dt/2 Richardson vs QL, vol pts | QL grid change")
+    print("   days    k      type   QuantLib $   blur $      diff $    vol pts  | blur at half the step, vs QL | QL grid change")
     for j, (days, k, call) in enumerate(qc):
         print(f"   {days:4d}  {k:+.3f}  {'call' if call else 'put '}  {QL[j, -1] * qD[j]:10.4f}  {b1[j] * qD[j]:10.4f}  "
-              f"{(b1[j] - QL[j, -1]) * qD[j]:+9.5f}  {v(b1)[j] - v(QL[:, -1])[j]:+7.4f}  |  {v(bR)[j] - v(QL[:, -1])[j]:+7.4f}"
-              f"                         |  {v(QL[:, -1])[j] - v(QL[:, 0])[j]:+7.4f}")
-    dv, dvR, dq = v(b1) - v(QL[:, -1]), v(bR) - v(QL[:, -1]), v(QL[:, -1]) - v(QL[:, 0])
+              f"{(b1[j] - QL[j, -1]) * qD[j]:+9.5f}  {v(b1)[j] - v(QL[:, -1])[j]:+7.4f}  |  {v(b2)[j] - v(QL[:, -1])[j]:+7.4f}"
+              f"                    |  {v(QL[:, -1])[j] - v(QL[:, 0])[j]:+7.4f}")
+    dv, dv2, dq = v(b1) - v(QL[:, -1]), v(b2) - v(QL[:, -1]), v(QL[:, -1]) - v(QL[:, 0])
     print(f"   blur (production) vs QuantLib: max {np.max(np.abs(dv)):.4f} vol points, max ${np.max(np.abs(b1 - QL[:, -1]) * qD):.4f}")
-    print(f"   blur Richardson (dt, dt/2) vs QuantLib: max {np.max(np.abs(dvR)):.4f} vol points, "
-          f"max ${np.max(np.abs(bR - QL[:, -1]) * qD):.4f}")
+    print(f"   blur at half the time step vs QuantLib: max {np.max(np.abs(dv2)):.4f} vol points, "
+          f"max ${np.max(np.abs(b2 - QL[:, -1]) * qD):.4f}")
     print(f"   QuantLib's own grid change ({grids[0][0]} -> {grids[1][0]}): max {np.max(np.abs(dq)):.4f} vol points;  "
           f"QuantLib time {tql:.0f} s")
     print()
@@ -295,7 +294,7 @@ def main():
             orders = [np.log(ds[j] / ds[j + 1]) / np.log(ratio) if ds[j + 1] > 0 else np.inf for j in range(len(ds) - 1)]
             print(f"     {g:7s} rms successive differences " + "  ".join(f"{x:.1e}" for x in ds) +
                   "   observed order " + "  ".join(f"{o:.2f}" for o in orders))
-    print(f"   domain: ln(S/F) on [-4, 2.5] instead of [{X_LO}, {X_HI}] (same steps and dx), change in vol points:")
+    print(f"   domain: ln(S/F) on [{X_LO - 1:g}, {X_HI + 1:g}] instead of [{X_LO}, {X_HI}] (same steps and dx), change in vol points:")
     Vw, Vp = ivs(R["wide"][0]), ivs(R["prod"][0])
     line = "     "
     for g, msk in groups:
