@@ -2,7 +2,7 @@ Local volatility from Stage 1's SVI surface (spy_full_2026-10-23, 32 expiries, 3
 
 1. Gatheral's total-variance formula, checked
    flat 20% surface: max |sigma_loc - 20%| = 0.0e+00
-   vs Dupire on prices (c_T / (c_kk - c_k) by finite differences), 1639 reliable points mid-interval in all 32 intervals: max relative difference 3.7e-04
+   vs Dupire on prices (c_T / (c_kk - c_k) by finite differences), 1874 reliable points mid-interval in all 32 intervals: max relative difference 3.7e-04
 
 2. Raw Dupire local vol, %, mid-interval (between the expiry named and the one before); in [ ] = flagged
                            -0.50   -0.30   -0.20   -0.10   -0.05   +0.00   +0.05   +0.10   +0.20   +0.30   (k = ln K/F)
@@ -17,23 +17,23 @@ Local volatility from Stage 1's SVI surface (spy_full_2026-10-23, 32 expiries, 3
    to 2026-11-05   12.5d[ 135.7][ 154.8][ 132.6][  61.5][  31.8][  14.8][  13.0][  39.0][ 583.4][ 390.0]
    to 2026-11-06   13.5d[ 135.7][ 153.0][ 134.6][  67.5][  36.7][  18.0][  14.6][  36.4][ 480.8][ 361.6]
    to 2026-11-13   17.5d[ 120.1][ 114.3][  94.2]    48.0    27.0    13.8[  10.5][  21.4][ 213.8][ 250.6]
-   to 2026-11-20   24.5d[ 120.3]   104.2    82.0    42.6    25.2    14.1[  11.1][  20.7][ 161.9][ 358.6]
+   to 2026-11-20   24.5d   120.3   104.2    82.0    42.6    25.2    14.1[  11.1][  20.7][ 161.9][ 358.6]
    to 2026-11-27   31.5d[  83.7][  73.6][  59.1][  33.2][  20.9][  12.3][   9.0][  11.8][  48.5][ 218.8]
    to 2026-11-30   36.5d[  73.5][  60.7][  47.3][  26.9][  17.7][  11.1][   8.5][  11.5][  48.8][ 368.1]
    to 2026-12-04   40.0d[ 109.9][  94.6][  74.8][  42.4][  27.3][  16.7][  12.4][  16.8][  81.6][ 999.9]
-   to 2026-12-18   49.0d[ 116.7]    86.8    61.6    33.8    23.0    15.4    11.8[  13.0][  25.3][ 135.5]
+   to 2026-12-18   49.0d   116.7    86.8    61.6    33.8    23.0    15.4    11.8[  13.0][  25.3][ 135.5]
    to 2026-12-31   62.5d[  74.3][  64.7]    50.1    29.8    20.6[  13.7][  10.1][  10.4][  29.2][ 137.5]
    to 2027-01-15   76.5d   111.8    69.9[  44.8][  25.5][  19.2][  14.8][  12.3][  12.5][  19.1][   9.2]
    to 2027-01-29   91.0d[  77.9][  64.2][  47.7][  29.1][  21.1][  15.0][  11.2][   9.7][  12.0][  11.7]
-   to 2027-02-19  108.5d[  82.8]    59.4    42.6    26.4    19.8    14.9    11.7[  10.8][  17.0][  39.6]
+   to 2027-02-19  108.5d    82.8    59.4    42.6    26.4    19.8    14.9    11.7[  10.8][  17.0][  39.6]
    to 2027-02-26  122.5d[  65.2][  54.0][  41.8][  27.6][  21.2][  16.0][  12.4][  10.7][  12.4][  14.3]
-   to 2027-03-19  136.5d[  90.8]    54.9[  37.6][  24.5][  19.7][  16.0]    13.6[  12.6][  15.7][  20.4]
+   to 2027-03-19  136.5d    90.8    54.9[  37.6][  24.5][  19.7][  16.0]    13.6[  12.6][  15.7][  20.4]
    to 2027-03-31  153.0d[  64.2][  48.5][  36.3][  24.2][  19.1][  14.9][  11.9][  10.2][  10.6][  13.2]
-   to 2027-06-17  198.0d    68.8    46.2    34.3    24.0    19.8    16.3    13.8    12.3[  12.7][  18.0]
+   to 2027-06-17  198.0d    68.8    46.2    34.3    24.0    19.8    16.3    13.8    12.3    12.7[  18.0]
    to 2027-06-30  243.5d[  66.0][  47.0][  35.7][  25.1][  20.5][  16.7][  13.7][  11.6][  10.1][  11.7]
-   to 2027-09-17  289.5d[  56.2]    39.6    30.9    23.1    19.7    16.9    14.7    13.2    12.8[  16.9]
+   to 2027-09-17  289.5d    56.2    39.6    30.9    23.1    19.7    16.9    14.7    13.2    12.8    16.9
    to 2027-09-30  335.5d[  48.3][  36.9][  29.9][  23.1][  20.0][  17.3][  15.0][  13.3][  11.7][  12.9]
-   to 2027-12-17  381.0d[  48.6]    34.7    27.9    21.8    19.2    17.0    15.1    13.8    13.0[  15.4]
+   to 2027-12-17  381.0d    48.6    34.7    27.9    21.8    19.2    17.0    15.1    13.8    13.0    15.4
    to 2028-01-21  437.5d[  41.3][  30.8][  25.5][  20.6][  18.5][  16.6][  15.0][  13.8][  12.9][  14.4]
    to 2028-06-16  528.5d    43.9    32.0    26.3    21.2    19.0    17.0    15.4    14.1    12.9    13.6
    to 2028-12-15  693.0d    38.4    28.7    24.2    20.1    18.3    16.7    15.4    14.4    13.3    13.9
@@ -41,61 +41,64 @@ Local volatility from Stage 1's SVI surface (spy_full_2026-10-23, 32 expiries, 3
    flags: E beyond the quoted strikes, G denominator g < 0.1, N fit noise moves it > 10% (any of them puts the cell in brackets)
 
 3. Unreliable region on k in [-2, 1] (step 0.005) x 128 times (4 per interval)
-   E beyond quoted strikes         76.0% of cells
+   E beyond quoted strikes         66.2% of cells
    G g < 0.1                       20.6% of cells
-   G inside the quoted strikes      1.5% of cells
+   G inside the quoted strikes      2.9% of cells
    N time noise > 10%              51.4% of cells
-   N only (kept exact, marked)     13.0% of cells
-   no flag                          9.4% of cells
-   By expiry interval: the quoted k range (both bracketing expiries), the part of it Dupire is used as is
+   N only (kept exact, marked)     14.2% of cells
+   no flag                         16.8% of cells
+   By expiry interval: the quoted k range (of the expiry ending it), the part of it Dupire is used as is
    (no E or G flag; everything else is regularized), the share of that part flagged N, and min g in it:
         0.0-   3.0d  quoted k -0.17..+0.02   used -0.17..+0.02   N   0%   min g 0.10
-        3.0-   4.0d  quoted k -0.17..+0.02   used -0.06..+0.02   N   0%   min g 0.11
-        4.0-   5.0d  quoted k -0.21..+0.03   used -0.07..+0.03   N   0%   min g 0.10
-        5.0-   6.0d  quoted k -0.28..+0.04   used -0.09..+0.04   N  53%   min g 0.10
-        6.0-   7.0d  quoted k -0.30..+0.06   used -0.11..+0.06   N 100%   min g 0.10
+        3.0-   4.0d  quoted k -0.21..+0.03   used -0.21..+0.03   N   5%   min g 0.10
+        4.0-   5.0d  quoted k -0.28..+0.04   used -0.28..+0.04   N   0%   min g 0.10
+        5.0-   6.0d  quoted k -0.30..+0.06   used -0.09..+0.06   N  56%   min g 0.10
+        6.0-   7.0d  quoted k -0.47..+0.08   used -0.47..+0.08   N  81%   min g 0.10
         7.0-  10.0d  quoted k -0.32..+0.08   used -0.12..+0.08   N 100%   min g 0.10
        10.0-  11.0d  quoted k -0.26..+0.08   used -0.13..+0.08   N 100%   min g 0.10
-       11.0-  12.0d  quoted k -0.26..+0.06   used -0.15..+0.06   N 100%   min g 0.10
-       12.0-  13.0d  quoted k -0.08..+0.06   used -0.08..+0.06   N 100%   min g 0.25
-       13.0-  14.0d  quoted k -0.08..+0.08   used -0.08..+0.08   N 100%   min g 0.26
-       14.0-  21.0d  quoted k -0.42..+0.10   used -0.42..+0.10   N  18%   min g 0.10
-       21.0-  28.0d  quoted k -0.42..+0.12   used -0.42..+0.12   N  16%   min g 0.10
-       28.0-  35.0d  quoted k -0.42..+0.15   used -0.42..+0.15   N 100%   min g 0.10
-       35.0-  38.0d  quoted k -0.42..+0.18   used -0.42..+0.16   N 100%   min g 0.10
+       11.0-  12.0d  quoted k -0.32..+0.06   used -0.15..+0.06   N 100%   min g 0.10
+       12.0-  13.0d  quoted k -0.08..+0.08   used -0.08..+0.08   N 100%   min g 0.25
+       13.0-  14.0d  quoted k -0.42..+0.10   used -0.16..+0.10   N 100%   min g 0.10
+       14.0-  21.0d  quoted k -0.42..+0.12   used -0.42..+0.12   N  22%   min g 0.10
+       21.0-  28.0d  quoted k -0.93..+0.15   used -0.93..+0.14   N   9%   min g 0.10
+       28.0-  35.0d  quoted k -0.42..+0.19   used -0.42..+0.15   N 100%   min g 0.10
+       35.0-  38.0d  quoted k -0.47..+0.18   used -0.47..+0.16   N 100%   min g 0.10
        38.0-  42.0d  quoted k -0.42..+0.16   used -0.42..+0.16   N 100%   min g 0.11
-       42.0-  56.0d  quoted k -0.42..+0.16   used -0.42..+0.16   N  12%   min g 0.12
+       42.0-  56.0d  quoted k -1.33..+0.26   used -1.33..+0.19   N   6%   min g 0.10
        56.0-  69.0d  quoted k -0.50..+0.21   used -0.50..+0.21   N  64%   min g 0.10
-       69.0-  84.0d  quoted k -0.50..+0.21   used -0.50..+0.21   N  65%   min g 0.12
+       69.0-  84.0d  quoted k -1.70..+0.27   used -1.70..+0.23   N  25%   min g 0.10
        84.0-  98.0d  quoted k -0.46..+0.16   used -0.46..+0.16   N 100%   min g 0.12
-       98.0- 119.0d  quoted k -0.46..+0.16   used -0.46..+0.16   N  13%   min g 0.13
+       98.0- 119.0d  quoted k -0.65..+0.17   used -0.65..+0.17   N  12%   min g 0.13
       119.0- 126.0d  quoted k -0.35..+0.16   used -0.35..+0.16   N 100%   min g 0.16
-      126.0- 147.0d  quoted k -0.35..+0.16   used -0.35..+0.16   N  71%   min g 0.17
+      126.0- 147.0d  quoted k -1.12..+0.39   used -1.12..+0.32   N  36%   min g 0.10
       147.0- 159.0d  quoted k -0.79..+0.17   used -0.79..+0.17   N 100%   min g 0.13
-      159.0- 237.0d  quoted k -0.79..+0.17   used -0.79..+0.17   N   0%   min g 0.14
+      159.0- 237.0d  quoted k -1.36..+0.60   used -1.36..+0.42   N   7%   min g 0.10
       237.0- 250.0d  quoted k -0.41..+0.22   used -0.41..+0.22   N 100%   min g 0.21
-      250.0- 329.0d  quoted k -0.41..+0.22   used -0.41..+0.22   N   0%   min g 0.22
+      250.0- 329.0d  quoted k -1.37..+0.56   used -1.37..+0.49   N   5%   min g 0.10
       329.0- 342.0d  quoted k -0.36..+0.21   used -0.36..+0.21   N 100%   min g 0.28
-      342.0- 420.0d  quoted k -0.36..+0.21   used -0.36..+0.21   N   0%   min g 0.30
-      420.0- 455.0d  quoted k -1.48..+0.60   used -1.48..+0.59   N 100%   min g 0.10
+      342.0- 420.0d  quoted k -1.48..+0.60   used -1.48..+0.56   N  11%   min g 0.10
+      420.0- 455.0d  quoted k -1.74..+0.60   used -1.74..+0.59   N 100%   min g 0.10
       455.0- 602.0d  quoted k -1.53..+0.60   used -1.53..+0.60   N   7%   min g 0.11
-      602.0- 784.0d  quoted k -1.53..+0.57   used -1.53..+0.57   N   0%   min g 0.18
+      602.0- 784.0d  quoted k -2.00..+0.57   used -2.00..+0.57   N   0%   min g 0.18
       784.0- 819.0d  quoted k -2.00..+0.52   used -2.00..+0.52   N 100%   min g 0.19
    Evidence: Dupire on a second, independently built arbitrage-free SVI fit of the same quotes
    (svi_surface_alt.json: different repair, same data). Share of cells where the two local vols
    differ by more than 10%, and the median difference:
-     no flag                1.1%   median   0.9%   (7229 cells)
-     N only                 5.9%   median   2.4%   (10026 cells)
-     G (inside quotes)     39.9%   median   7.8%   (1189 cells)
-     E (beyond quotes)     52.7%   median  11.3%   (58484 cells)
+     no flag                0.7%   median   1.0%   (12925 cells)
+     N only                 8.8%   median   2.5%   (10914 cells)
+     G (inside quotes)     57.8%   median  12.2%   (2197 cells)
+     E (beyond quotes)     58.2%   median  14.1%   (50892 cells)
 
-4. Regularization: E and G cells take the reliable local vol at the same time (linear in k across a gap,
-   flat beyond the last reliable strike), then everything is held in [2%, 300%].
-   cells changed 77.6%; reliable or N-only cells changed: 0 (clip only)
-   raw local vol range 1.3% .. 3032%; regularized 7.1% .. 182%
-      7d  k = -0.4, -0.2, 0, +0.1, +0.3:  raw  352.3  189.0   15.4  132.8  857.0   regularized   92.0   92.0   15.4   29.2   29.2
-     30d  k = -0.4, -0.2, 0, +0.1, +0.3:  raw   80.3   59.9   12.3   12.2  200.3   regularized   80.3   59.9   12.3   12.2   20.7
-     90d  k = -0.4, -0.2, 0, +0.1, +0.3:  raw   74.5   47.8   15.0    9.7   11.8   regularized   74.5   47.8   15.0    9.7   10.6
-    365d  k = -0.4, -0.2, 0, +0.1, +0.3:  raw   42.3   28.2   17.0   13.8   15.8   regularized   39.8   28.2   17.0   13.8   13.2
+4. Regularization: the raw Dupire value held in [2%, 300%] (300% where g <= 0);
+   the flags mark the unreliable region and do not change the value.
+   raw local vol range 1.3% .. 3032%; undefined (g <= 0) in 0.0% of cells
+   clipped at the cap: 10.0% of all cells, 0.4% of cells inside the quoted strikes; at the floor: 0.0%
+   largest raw value inside the quoted strikes: 446% at t = 2.66d, k = -0.080 (why the cap is 300%)
+   rejected alternative (local_vol_filled: E and G cells replaced by the reliable local vol at the
+   same time) changes 68.6% of cells; Stage 3's round trip measures its cost on quoted options.
+      7d  k = -0.4, -0.2, 0, +0.1, +0.3:  used  300.0  189.0   15.4  132.8  300.0   filled   92.0   92.0   15.4   69.6   69.6
+     30d  k = -0.4, -0.2, 0, +0.1, +0.3:  used   80.3   59.9   12.3   12.2  200.3   filled   80.3   59.9   12.3   12.2   20.7
+     90d  k = -0.4, -0.2, 0, +0.1, +0.3:  used   74.5   47.8   15.0    9.7   11.8   filled   74.5   47.8   15.0    9.7   10.6
+    365d  k = -0.4, -0.2, 0, +0.1, +0.3:  used   42.3   28.2   17.0   13.8   15.8   filled   42.3   28.2   17.0   13.8   15.8
 
 wrote data/spy_full_2026-10-23/local_vol.json

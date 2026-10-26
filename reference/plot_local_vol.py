@@ -1,4 +1,4 @@
-"""Plot Stage 2: raw Dupire local vol, where it breaks, the regularized surface, and two slices.
+"""Plot Stage 2: the local vol Stage 3 prices with, where it is unreliable, the rejected wing fill, and slices.
 
 python reference/plot_local_vol.py [out.png]
 """
@@ -19,6 +19,7 @@ K = np.linspace(-1.0, 0.5, 601)
 TC = cell_times(S, per=8)
 RAW = np.array([S.dupire_raw(K, t)[0] for t in TC])
 REG = np.array([S.local_vol(K, t)[0] for t in TC])
+FIL = np.array([S.local_vol_filled(K, t)[0] for t in TC])
 F = np.array([S.flags(K, t)[0] for t in TC])
 days = TC * 365
 
@@ -37,7 +38,7 @@ def heat(ax, Z, title):
     return m
 
 
-m = heat(axes[0, 0], RAW, "01 RAW DUPIRE LOCAL VOL (CLIPPED AT 60% FOR COLOUR)")
+m = heat(axes[0, 0], REG, "01 DUPIRE LOCAL VOL, HELD IN [2%, 300%] (COLOUR STOPS AT 60%)")
 fig.colorbar(m, ax=axes[0, 0], label="local vol, %")
 
 ax = axes[0, 1]
@@ -51,11 +52,11 @@ ax.set_ylabel("days to expiry (log)", family="monospace")
 from matplotlib.patches import Patch
 ax.legend(handles=[Patch(color=c, label=l) for c, l in zip(
     ["#ffffff", "#9a9a9a", "#4a4a4a", "#141414"],
-    ["reliable: Dupire as is", "N: quote noise > 10% (kept, marked)", "G: denominator g < 0.1 (regularized)",
-     "E: beyond quoted strikes (regularized)"])], fontsize=7, loc="lower left", framealpha=0.9,
+    ["reliable", "N: quote noise moves it > 10%", "G: denominator g < 0.1",
+     "E: beyond quoted strikes"])], fontsize=7, loc="lower left", framealpha=0.9,
     labelcolor="black", facecolor="#dddddd")
 
-m = heat(axes[1, 0], REG, "03 REGULARIZED LOCAL VOL (WHAT STAGE 3 PRICES WITH)")
+m = heat(axes[1, 0], FIL, "03 REJECTED: E AND G CELLS FILLED FROM RELIABLE ONES")
 fig.colorbar(m, ax=axes[1, 0], label="local vol, %")
 for ax in (axes[0, 0], axes[1, 0]):
     ax.contour(K, days, ((F & (E_FLAG | G_FLAG)) == 0).astype(float), levels=[0.5], colors="white",
@@ -66,13 +67,13 @@ for t_d, a in ((30, 1.0), (365, 0.55)):
     t = t_d / 365
     lv, raw, f = S.local_vol(K, t)
     iv = S.implied_vol(K, t)
-    ax.plot(K, raw * 100, ":", color="white", alpha=a, lw=1.0, label=f"{t_d}d raw Dupire")
-    ax.plot(K, lv * 100, "-", color="white", alpha=a, lw=1.4, label=f"{t_d}d regularized")
+    ax.plot(K, lv * 100, "-", color="white", alpha=a, lw=1.4, label=f"{t_d}d local vol used (raw, clipped)")
+    ax.plot(K, S.local_vol_filled(K, t)[0] * 100, "-.", color="white", alpha=a, lw=1.0, label=f"{t_d}d rejected fill")
     ax.plot(K, iv * 100, "--", color="gray", alpha=a, lw=0.9, label=f"{t_d}d implied")
     bad = (f & (E_FLAG | G_FLAG)) > 0
     ax.fill_between(K, 0, 150, where=bad, color="white", alpha=0.06 * a, step="mid")
 ax.set_ylim(0, 120)
-ax.set_title("04 SLICES: RAW VS REGULARIZED (SHADED = REGULARIZED REGION)", **mono)
+ax.set_title("04 SLICES (SHADED = E OR G: UNRELIABLE)", **mono)
 ax.set_xlabel("k = ln(K / F_T)", family="monospace")
 ax.set_ylabel("vol, %", family="monospace")
 ax.legend(fontsize=7, frameon=False, loc="upper right")

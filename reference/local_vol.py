@@ -21,19 +21,28 @@ positive factor. So Dupire divides by (a scaled) second strike derivative of the
 where the density is thin, g is small and every error in w_kk is magnified.
 
 Where it is unreliable (flags, per (k, T) cell):
-  E  extrapolated: k outside the strikes quoted (bid > 0) on either expiry that brackets T.
-     There the SVI wing is a straight line chosen by the fit, not by any price.
+  E  extrapolated: k outside the strikes quoted (bid > 0) on the expiry that ends T's interval.
+     The local vol inside an interval is what carries the density into that expiry, so where the
+     expiry has prices, they pin it; outside them the SVI wing is a straight line chosen by the
+     fit, not by any price. (Flagging by the shorter expiry's quotes too would throw away the
+     wings of a long expiry whenever the one before it is thinly quoted: Stage 3's round trip
+     then misses those wings by up to 6 vol points.)
   G  small denominator: g < 0.1. Half the grid cells below that move by more than 10% between
      two independent arbitrage-free fits of the same quotes (measured below).
   N  noisy in time: the quoted fit error on the two bracketing expiries, turned into an error in
      dw/dT over the gap between them, moves sigma_loc by more than 10%. Daily expiries a day
      apart do this near the money.
 
-Regularization (what Stage 3 prices with): cells flagged E or G get their local vol from the
-reliable cells at the same time, linear in k across a gap and flat beyond the last reliable
-strike; then the result is held inside [2%, 300%]. Cells flagged only N keep the exact Dupire
-value (it is what the surface implies, and Stage 3's round trip needs exactly that); they are
-marked, not changed. After the last expiry the last interval's local vol is held flat in time.
+Regularization (what Stage 3 prices with): the raw Dupire value, held inside [2%, 300%] (and 300%
+where g <= 0 makes it undefined). The flags mark where it is unreliable; they do not change it.
+The cap is high because the quotes need it: inside the quoted strikes of the 3-day expiry the raw
+local vol of the deep puts reaches about 450%, and a 150% cap already moves those quotes' implied
+vols by 0.4 vol points in Stage 3's round trip (100%: 2 vol points). The first version of this
+stage instead replaced E and G cells by the reliable local vol at the same time (linear in k
+across a gap, flat beyond); that is kept as local_vol_filled() for comparison and rejected,
+because paths reach a long expiry's quoted deep puts through earlier intervals where those strikes
+were unquoted, and flattening there cost up to 0.45 vol points on quoted options (section 4).
+After the last expiry the last interval's local vol is held flat in time.
 """
 import sys
 import json
@@ -43,6 +52,7 @@ from scipy.special import ndtr
 
 HERE = Path(__file__).parent
 G_MIN = 0.1            # flag G below this
+G_REG = 0.1            # local_vol_filled() replaces below this
 NOISE_MAX = 0.10       # flag N above this relative error in sigma_loc
 LV_FLOOR, LV_CAP = 0.02, 3.0
 E_FLAG, G_FLAG, N_FLAG = 1, 2, 4
@@ -128,8 +138,7 @@ class Surface:
         i = min(self.interval(t), n - 1 + (t > T[-1]))
         lo_i, hi_i = (max(i - 1, 0), min(i, n - 1)) if i < n else (n - 2, n - 1)
         kq = self.kq
-        lo_k = max(kq[lo_i][0], kq[hi_i][0]) if i > 0 else kq[0][0]
-        hi_k = min(kq[lo_i][1], kq[hi_i][1]) if i > 0 else kq[0][1]
+        lo_k, hi_k = kq[hi_i]
         f = np.where((k < lo_k) | (k > hi_k), E_FLAG, 0)
         w, w1, w2, wT = self.w_all(k, t)
         g = durrleman(w, w1, w2, k)
@@ -147,10 +156,18 @@ class Surface:
         return f | np.where(rel > NOISE_MAX, N_FLAG, 0), g, rel
 
     def local_vol(self, k, t):
-        """Regularized local vol on the array k (ascending) at time t, plus the raw value and the flags."""
+        """Local vol Stage 3 prices with on the array k at time t: raw Dupire held in [LV_FLOOR, LV_CAP]
+        (LV_CAP where it is undefined). Returns it, the raw value and the flags."""
         raw, g = self.dupire_raw(k, t)
         f = self.flags(k, t)[0]
-        ok = ((f & (E_FLAG | G_FLAG)) == 0) & np.isfinite(raw)
+        return np.clip(np.nan_to_num(raw, nan=LV_CAP), LV_FLOOR, LV_CAP), raw, f
+
+    def local_vol_filled(self, k, t):
+        """The rejected alternative: E and G cells take the reliable local vol at the same time (linear in k
+        across a gap, flat beyond the last reliable strike), then the same clip."""
+        raw, g = self.dupire_raw(k, t)
+        f = self.flags(k, t)[0]
+        ok = ((f & E_FLAG) == 0) & (g >= G_REG) & np.isfinite(raw)
         if ok.any():
             lv = np.where(ok, raw, np.interp(k, k[ok], raw[ok]))
         else:                                   # nothing reliable at this time: the at-the-money implied vol
@@ -247,7 +264,7 @@ if __name__ == "__main__":
                    ("N time noise > 10%", (F & N_FLAG) > 0),
                    ("N only (kept exact, marked)", F == N_FLAG), ("no flag", F == 0)]:
         print(f"   {lab:30s} {m.sum() / tot:6.1%} of cells")
-    print("   By expiry interval: the quoted k range (both bracketing expiries), the part of it Dupire is used as is")
+    print("   By expiry interval: the quoted k range (of the expiry ending it), the part of it Dupire is used as is")
     print("   (no E or G flag; everything else is regularized), the share of that part flagged N, and min g in it:")
     for i in range(n):
         rows = slice(4 * i, 4 * i + 4)
@@ -284,19 +301,29 @@ if __name__ == "__main__":
     print()
 
     # 4. Regularization
-    changed = np.abs(REG - np.nan_to_num(RAW, nan=-1)) > 1e-12
-    print("4. Regularization: E and G cells take the reliable local vol at the same time (linear in k across a gap,")
-    print(f"   flat beyond the last reliable strike), then everything is held in [{LV_FLOOR:.0%}, {LV_CAP:.0%}].")
-    print(f"   cells changed {changed.mean():.1%}; reliable or N-only cells changed: "
-          f"{int((changed & ((F & (E_FLAG | G_FLAG)) == 0)).sum())} (clip only)")
-    print(f"   raw local vol range {np.nanmin(RAW) * 100:.1f}% .. {np.nanmax(RAW) * 100:.0f}%; regularized "
-          f"{REG.min() * 100:.1f}% .. {REG.max() * 100:.0f}%")
+    inq = (F & E_FLAG) == 0
+    print(f"4. Regularization: the raw Dupire value held in [{LV_FLOOR:.0%}, {LV_CAP:.0%}] ({LV_CAP:.0%} where g <= 0);")
+    print("   the flags mark the unreliable region and do not change the value.")
+    print(f"   raw local vol range {np.nanmin(RAW) * 100:.1f}% .. {np.nanmax(RAW) * 100:.0f}%; "
+          f"undefined (g <= 0) in {np.mean(~np.isfinite(RAW)):.1%} of cells")
+    print(f"   clipped at the cap: {np.mean(np.nan_to_num(RAW, nan=9) > LV_CAP):.1%} of all cells, "
+          f"{np.mean(np.nan_to_num(RAW[inq], nan=9) > LV_CAP):.1%} of cells inside the quoted strikes; "
+          f"at the floor: {np.mean(np.nan_to_num(RAW, nan=9) < LV_FLOOR):.1%}")
+    big = np.where(inq, np.nan_to_num(RAW, nan=0), 0)
+    a, b = np.unravel_index(np.argmax(big), big.shape)
+    print(f"   largest raw value inside the quoted strikes: {big[a, b] * 100:.0f}% at t = {TC[a] * 365:.2f}d, "
+          f"k = {KG[b]:+.3f} (why the cap is 300%)")
+    FIL = np.array([S.local_vol_filled(KG, t)[0] for t in TC])
+    print(f"   rejected alternative (local_vol_filled: E and G cells replaced by the reliable local vol at the")
+    print(f"   same time) changes {np.mean(np.abs(FIL - REG) > 1e-12):.1%} of cells; Stage 3's round trip "
+          f"measures its cost on quoted options.")
     for t_d in (7, 30, 90, 365):
         t = t_d / 365
         lv, raw, f = S.local_vol(KG, t)
+        fl = S.local_vol_filled(KG, t)[0]
         sel = [np.argmin(np.abs(KG - x)) for x in (-0.4, -0.2, 0.0, 0.1, 0.3)]
-        print(f"   {t_d:4d}d  k = -0.4, -0.2, 0, +0.1, +0.3:  raw " +
-              " ".join(f"{raw[j] * 100:6.1f}" for j in sel) + "   regularized " + " ".join(f"{lv[j] * 100:6.1f}" for j in sel))
+        print(f"   {t_d:4d}d  k = -0.4, -0.2, 0, +0.1, +0.3:  used " +
+              " ".join(f"{lv[j] * 100:6.1f}" for j in sel) + "   filled " + " ".join(f"{fl[j] * 100:6.1f}" for j in sel))
 
     out = folder / "local_vol.json"
     KJ = np.round(np.linspace(-2.0, 1.0, 151), 4)
