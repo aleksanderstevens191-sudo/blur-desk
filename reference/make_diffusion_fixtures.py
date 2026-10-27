@@ -2,6 +2,7 @@
 
 python reference/make_diffusion_fixtures.py           -> src/diffusion_fixtures.json
 python reference/make_diffusion_fixtures.py --check   (CI) recompute and compare with the committed file, 1e-10
+                                                        (the score: 1e-8 relative, where the density is above 1e-4)
 
 Everything is panel 16's algorithm (diffusion.PANEL, the end of diffusion.py) in float64, on the market's Dec 18
 density from src/spy_fit.json:
@@ -66,9 +67,20 @@ def main():
     )
     path = HERE.parent / "src" / "diffusion_fixtures.json"
     if "--check" in sys.argv:
-        worst = compare(json.loads(path.read_text()), json.loads(json.dumps(out)))
-        ok = worst < 1e-10
-        print(f"{'PASS' if ok else 'FAIL'} {path.name} recomputed: worst difference {worst:.1e} (< 1e-10); "
+        old, new = json.loads(path.read_text()), json.loads(json.dumps(out))
+        # The score is a ratio of two blurred tails. Far out, the FFT's rounding, which differs between machines,
+        # swamps both: the score differs by 1e-4 (relative) where q is 1e-12, and by thousands where q is 1e-19
+        # (GitHub's runner vs the machine that wrote the file). The sampler never goes there. So the score is
+        # compared where q > 1e-4, as src/test-diffusion.mjs does, and everything else to 1e-10.
+        ds = 0.0
+        for a, b in zip(old["density"], new["density"]):
+            q, sa, sb = np.array(a["q"]), np.array(a.pop("score")), np.array(b.pop("score"))
+            m = q > 1e-4
+            ds = max(ds, float(np.max(np.abs(sa[m] - sb[m]) / np.maximum(1, np.abs(sa[m])))))
+        worst = compare(old, new)
+        ok = worst < 1e-10 and ds < 1e-8
+        print(f"{'PASS' if ok else 'FAIL'} {path.name} recomputed: worst difference {worst:.1e} (< 1e-10), "
+              f"score {ds:.1e} (relative, where q > 1e-4; < 1e-8); "
               f"the run's own accuracy: CDF gap {gap:.1e}, L1 {l1:.1e}")
         sys.exit(0 if ok else 1)
     path.write_text(json.dumps(out, separators=(",", ":")))
