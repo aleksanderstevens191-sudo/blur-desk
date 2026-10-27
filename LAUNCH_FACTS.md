@@ -109,7 +109,7 @@ Panel 13 on blur-desk.vercel.app showed the same Dec 18 read-offs on the Mac (7.
 
 ## Two stocks (Part 3, panel 14)
 
-Commits are on branch `part3-2d` until it merges. Market for the panel and the sweep: S1 = S2 = 100, vols 30% / 25%, 1 year, r = 5%.
+Merged into `main` by PR #14 (merge commit 86729ee); the commits below came in with it and are on `main`. Market for the panel and the sweep: S1 = S2 = 100, vols 30% / 25%, 1 year, r = 5%.
 
 | # | What | Value | Machine | Source |
 | --- | --- | --- | --- | --- |
@@ -131,7 +131,7 @@ Commits are on branch `part3-2d` until it merges. Market for the panel and the s
 
 ## Local volatility (Part 4, panel 15)
 
-Commits are on branch `part4-localvol` until it merges. The Oct 23 2026 SPY chain: 32 expiries, 3 to 819 days, 3,320 out-of-the-money quotes; "liquid" means a mid of $0.50 or more (2,457 quotes). Vol points are implied-vol percentage points.
+Merged into `main` by PR #15 (merge commit 0b691f7), with the Mac panel readings from PR #16 (a403429); the commits below are on `main`. The Oct 23 2026 SPY chain: 32 expiries, 3 to 819 days, 3,320 out-of-the-money quotes; "liquid" means a mid of $0.50 or more (2,457 quotes). Vol points are implied-vol percentage points.
 
 | # | What | Value | Machine | Source |
 | --- | --- | --- | --- | --- |
@@ -157,7 +157,7 @@ Commits are on branch `part4-localvol` until it merges. The Oct 23 2026 SPY chai
 
 ## Diffusion models (Part 5, panel 16)
 
-Commits are on branch `part5-diffusion` until it merges. The density is the market's Dec 18 odds from panel 13 (the SPY Merton fit to the Oct 22 2026 quotes, `src/spy_fit.json`), in log-return ln(S_T / S). Risk-neutral, not a forecast. What may and may not be said about these numbers is in `docs/diffusion_claims.md`.
+Merged into `main` by PR #17 (merge commit 431d54d); the commits below came in with it and are on `main`. The density is the market's Dec 18 odds from panel 13 (the SPY Merton fit to the Oct 22 2026 quotes, `src/spy_fit.json`), in log-return ln(S_T / S). Risk-neutral, not a forecast. What may and may not be said about these numbers is in `docs/diffusion_claims.md`.
 
 | # | What | Value | Machine | Source |
 | --- | --- | --- | --- | --- |
