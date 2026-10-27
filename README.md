@@ -423,24 +423,25 @@ Checks: Black-Scholes barriers match Reiner-Rubinstein within $2.6e-4. Merton va
 
 ### On the GPU
 
-`src/gpu-lv.js` runs one step per dispatch, all steps in one submit. Each thread owns a grid node and walks its own kernel, so neighbouring threads blur by different amounts. The local-vol table's rows are read at the grid nodes once and blended in time per step. Up to 15 strikes share each node's weights. The last step (Black's formula) is done in 64-bit on the CPU. `src/lv.js` is the same algorithm in 64-bit JavaScript, and `src/test-lv.mjs` holds it within 1e-9 of Python (worst 2.3e-10).
+`src/gpu-lv.js` runs one step per dispatch, all steps in one submit. Each thread owns a grid node and walks its own kernel, so neighbouring threads blur by different amounts. The local-vol table's rows are read at the grid nodes once and blended in time per step. Up to 16 strikes share each node's weights. The last step (Black's formula) is done in 64-bit on the CPU. `src/lv.js` is the same algorithm in 64-bit JavaScript, and `src/test-lv.mjs` holds it within 1e-9 of Python (worst 2.3e-10).
 
-Getting 32-bit floats within 1e-4 took three changes:
-- **Symmetric weights.** The weight exp(−(y − μ)²/2s²) is computed as exp(−y²/2s²)·exp(−y/2), which is the same up to a constant. Rounding in the first factor is then identical at +y and −y, so it can't shift the kernel's mean. In the plain form, that drift added up over 957 steps to 1.2e-4 per $100 on a 1-year at-the-money call.
+Getting 32-bit floats within 1e-4 took four changes:
+- **Blur the change, not the value.** Each node's new value is its old value plus the weighted average of its neighbours' differences from it. With a flat vol every node has the same weights in every step, so the 32-bit rounding of the weights' sum is the same factor every time. Dividing whole prices by it shrank them 956 times over: the 1-year at-the-money put missed by 1.44e-4 on the Mac. A 32-bit emulation of the shader in JavaScript reproduced the miss (−2.9e-4 with an exact exp) and showed the cause. Dividing only the change brings it to 8e-6.
+- **An exp that fast math can't bend.** The weights use the shader's own exp (Cody-Waite reduction through `fma`, then a polynomial), good to 8e-8. The built-in exp is off by up to 1.9e-6 on SwiftShader, and Metal's fast-math exp is allowed up to 3 + |2x| ulp.
+- **Symmetric weights.** The weight exp(−(y − μ)²/2s²) is computed as exp(−y²/2s²)·exp(−y/2), which is the same up to a constant. Rounding in the first factor is then identical at +y and −y, so it can't shift the kernel's mean.
 - **Parity for in-the-money strikes.** An in-the-money strike is priced as its out-of-the-money twin plus put-call parity, so its intrinsic value never passes through the 32-bit steps.
-- **A column of ones.** Each batch also blurs a constant 1, which the exact blur leaves at 1, and every price is divided by what comes back. On the Mac (Metal compiles with fast math) every value shrank a little with each step, and the 1-year at-the-money put missed by 1.44e-4. The ones column shrinks the same way, so dividing by it cancels the drift.
 
 | Check (`/check.html?only=lv`, per $100 of forward) | Software GPU (SwiftShader) | Mac |
 | --- | --- | --- |
-| 12 flat-vol prices (28 and 342 days) vs Python and Black-Scholes | worst **4.4e-5** | not yet run |
-| 20 local-vol prices, 5 expiries from 3 to 342 days, strikes −2.5 to +1 sd | worst **1.0e-5** | not yet run |
+| 12 flat-vol prices (28 and 342 days) vs Python and Black-Scholes | worst **8.1e-6** | not yet rerun (before the fix: 1.44e-4, 1 of 32 failed) |
+| 20 local-vol prices, 5 expiries from 3 to 342 days, strikes −2.5 to +1 sd | worst **7.5e-6** | not yet rerun (before the fix: 5.7e-5) |
 
 ### In the demo
 
 **15 / LOCAL VOL** has four views:
 - **Heatmap:** SPY's local vol by strike and time, 1 to 900 days on a log scale. The red dashed lines mark the last quoted strikes of each expiry interval; past them the vol is extrapolation.
 - **The variable-width blur:** the local vol across strikes at the chosen expiry, and under it one day's blur at 13 spots. The bells are drawn 4x wide with equal areas, so you can see them narrow near the money and widen in the put wing.
-- **The round trip:** every quote of the chosen expiry, priced under local vol (Python, white) and live on the GPU (amber, up to 15 liquid strikes), minus the surface it came from. The ±0.1 vol-point lines are the requirement.
+- **The round trip:** every quote of the chosen expiry, priced under local vol (Python, white) and live on the GPU (amber, up to 16 liquid strikes), minus the surface it came from. The ±0.1 vol-point lines are the requirement.
 - **Model risk:** every barrier option under the three models on a log dollar axis, with the gap for each, at 98 or 342 days.
 
 `src/test-demo-lv.mjs` drives the panel at 3, 7, 28 and 98 days. Each live round trip must be under 0.1 vol points and within 0.01 of Python. On SwiftShader the worst round trip was 0.071 vol points, and the GPU and Python differed by at most 0.0001.
@@ -530,6 +531,7 @@ reference/make_lv_data.py          writes src/lv_data.json (the web table, quote
 reference/check_lv_ci.py           CI: the local-vol checks that fit in a few minutes
 src/lv.js, test-lv.mjs             the local-vol step in 64-bit JS, and its check against Python
 src/gpu-lv.js, check-lv.js         WGSL: the variable-width step (/check.html?only=lv)
+src/lv-f32-emulation.mjs           that step emulated in 32-bit JS: why it averages changes, not values
 src/localvol.js, test-demo-lv.mjs  the demo's panel 15, and its headless check
 .github/workflows/checks.yml       CI: every Python check, every JS test, the build and the GPU check page, on every push
 ```

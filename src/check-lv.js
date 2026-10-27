@@ -3,7 +3,7 @@
 // table, grid and time steps. Prices per $100 of forward, discounted.
 import fx from "./lv_fixtures.json";
 import { lvJob, impliedVol } from "./lv.js";
-import { lvGPU } from "./gpu-lv.js";
+import { lvGPU, expErrors } from "./gpu-lv.js";
 
 const e = (x) => x.toExponential(2);
 
@@ -12,6 +12,8 @@ export async function lvChecks(log, TOL) {
   let fails = 0;
   const { dt, m, dx, x_lo, x_hi } = data.settings;
   log(`grid dx ${dx} on [${x_lo}, ${x_hi}], steps <= ${dt * 365} day and >= ${m} per expiry interval; per $100 of forward`);
+  const ex = await expErrors();
+  log(`exp on [-34, 0.2] vs 64-bit: the GPU's built-in ${e(ex.builtin)}, the shader's expf ${e(ex.ours)} (relative; the weights use expf)`);
   const groups = new Map();
   for (const c of fx.cases) {
     const key = `${c.model}|${c.sigma ?? ""}|${c.i}`;
@@ -22,7 +24,7 @@ export async function lvChecks(log, TOL) {
     const c0 = cs[0];
     const ex = data.expiries[c0.i];
     const job = lvJob(data, { T: ex.T, D: ex.D, strikes: cs.map((c) => ({ k: c.k, call: c.call })), sigma: c0.model === "flat" ? c0.sigma : null });
-    const { prices, ms, drift } = await lvGPU(job);
+    const { prices, ms } = await lvGPU(job);
     cs.forEach((c, j) => {
       const d = Math.abs(prices[j] - c.py);
       const ok = d < TOL;
@@ -31,7 +33,7 @@ export async function lvChecks(log, TOL) {
         : `  vol ${(100 * impliedVol(prices[j] / job.scale, c.k, ex.T, c.call)).toFixed(3)} (surface ${(100 * c.iv_surface).toFixed(3)})`;
       log(`${ok ? "PASS" : "FAIL"} ${c.model.padEnd(4)} ${ex.name} k ${c.k.toFixed(4).padStart(7)} ${c.call ? "call" : "put "}` +
         ` gpu=${prices[j].toFixed(6)} py=${c.py.toFixed(6)} |gpu-py|=${e(d)}${extra}` +
-        (j === 0 ? `  (${job.steps.length} steps, ${cs.length} strikes, ${ms.toFixed(0)} ms; ones column ${e(drift[0])} from 1, divided out)` : ""));
+        (j === 0 ? `  (${job.steps.length} steps, ${cs.length} strikes, ${ms.toFixed(0)} ms)` : ""));
     });
   }
   return fails;

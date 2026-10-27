@@ -13,16 +13,33 @@
 // An in-the-money strike is priced as its out-of-the-money twin plus put-call parity
 // (call - put = 1 - e^k per unit of forward): its value is mostly intrinsic, and carrying
 // that through hundreds of 32-bit steps cost up to 2e-4 per $100 on a 1-year flat vol.
-// Each batch also blurs a column of ones, which the exact blur leaves at 1. On the
-// Mac (Metal, fast math) it drifted down with every step, the same way every price
-// did: 1.44e-4 per $100 on a 1-year at-the-money put. Prices are divided by it.
+// Each node's new value is its old value plus the weighted average of its neighbours'
+// differences from it, not the weighted average itself. With a flat vol every node and
+// step has the same weights, so the rounding of their sum is the same factor every step;
+// dividing whole prices by it shrank them 956 times over (3e-4 per $100 on a 1-year
+// at-the-money put, on the Mac and in a 32-bit emulation). Dividing only the change
+// leaves 8e-6.
 import { context, storage, readback, groups } from "./gpu.js";
 import { lastStep } from "./lv.js";
 
 export const MAXC = 16;
-export const STRIKES = MAXC - 1; // per batch: the last column is a constant 1 (see lvGPU)
+export const STRIKES = MAXC;
+
+// exp with Cody-Waite reduction through fma, which fast math can't reassociate, and a
+// degree-7 polynomial: about 1 ulp at every argument. Metal's fast-math exp may be off by
+// up to 3 + |2x| ulp (about 8e-6 at the 8-sd tap, x = -32), which bends the kernel.
+const EXPF = /* wgsl */ `
+fn expf(x: f32) -> f32 {
+  let k = round(x * 1.4426950409);
+  var r = fma(-k, 0.693145751953125, x);
+  r = fma(-k, 1.428606765330187e-6, r);
+  let p = 1.0 + r * (1.0 + r * (0.5 + r * (0.16666667 + r * (0.041666668 + r * (0.008333334 + r * (0.0013888889 + r * 0.0001984127))))));
+  return ldexp(p, i32(k));
+}
+`;
 
 export const LV_STEP_WGSL = /* wgsl */ `
+${EXPF}
 struct Params { n: u32, C: u32, ra: u32, rb: u32, a: f32, h: f32, dx: f32, x0: f32 }
 const BLOCK = 32;
 const MAXC = ${MAXC}u;
@@ -72,6 +89,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) 
   let inv = 1.0 / (2.0 * s * s);
   var acc = array<f32, ${MAXC}>();
   var blk = array<f32, ${MAXC}>();
+  var vi = array<f32, ${MAXC}>();
+  for (var c = 0u; c < p.C; c++) { vi[c] = V[c * n + i]; }
   var den = 0.0;
   let Hi = i32(H);
   for (var j0 = -Hi; j0 <= Hi; j0 += BLOCK) {
@@ -80,14 +99,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) 
     var bden = 0.0;
     for (var j = j0; j < j1; j++) {
       let y = f32(j) * p.dx;
-      let w = exp(-y * y * inv) * exp(-0.5 * y);
+      let w = expf(-y * y * inv) * expf(-0.5 * y);
       bden += w;
-      for (var c = 0u; c < p.C; c++) { blk[c] += w * val(c, i32(i) + j); }
+      for (var c = 0u; c < p.C; c++) { blk[c] += w * (val(c, i32(i) + j) - vi[c]); }
     }
     den += bden;
     for (var c = 0u; c < p.C; c++) { acc[c] += blk[c]; }
   }
-  for (var c = 0u; c < p.C; c++) { out[c * n + i] = acc[c] / den; }
+  for (var c = 0u; c < p.C; c++) { out[c * n + i] = vi[c] + acc[c] / den; }
 }
 `;
 
@@ -110,15 +129,14 @@ export async function lvGPU(job) {
   const SN = new Float32Array(job.SN.length * n);
   job.SN.forEach((row, r) => SN.set(row, r * n));
   const snBuf = storage(device, SN);
-  const prices = [], drift = [];
+  const prices = [];
   const t0 = performance.now();
   const last = job.steps.length - 1;
   const itm = job.strikes.map(({ k, call }) => (call ? k < 0 : k > 0));
   const sl = itm.some(Boolean) ? job.sigAt(last) : null;
   const V0s = job.V0.map((V, c) => (itm[c] ? lastStep(job.x, sl, job.steps[last].b - job.steps[last].a, job.strikes[c].k, !job.strikes[c].call) : V));
-  const ones = new Float64Array(n).fill(1);
   for (let c0 = 0; c0 < V0s.length; c0 += STRIKES) {
-    const cols = [...V0s.slice(c0, c0 + STRIKES), ones];
+    const cols = V0s.slice(c0, c0 + STRIKES);
     const C = cols.length;
     const V0 = new Float32Array(C * n);
     cols.forEach((V, c) => V0.set(V, c * n));
@@ -144,15 +162,56 @@ export async function lvGPU(job) {
       [src, dst] = [dst, src];
     }
     const V = await readback(device, encoder, src, C * n);
-    const one = V[(C - 1) * n + job.center];
-    for (let c = 0; c < C - 1; c++) {
+    for (let c = 0; c < C; c++) {
       const { k, call } = job.strikes[c0 + c];
       const par = itm[c0 + c] ? (call ? 1 : -1) * (1 - Math.exp(k)) : 0;
-      prices.push(job.scale * (V[c * n + job.center] / one + par));
+      prices.push(job.scale * (V[c * n + job.center] + par));
     }
-    drift.push(one - 1);
     for (const buf of [a, b, ...uniforms]) buf.destroy();
   }
   snBuf.destroy();
-  return { prices, ms: performance.now() - t0, drift };
+  return { prices, ms: performance.now() - t0 };
+}
+
+// For /check.html: the shader's exp (built in, and expf above) against 64-bit exp on
+// [-34, 0.2], the range the weights use. Returns the worst relative errors.
+const EXP_TEST_WGSL = /* wgsl */ `
+${EXPF}
+@group(0) @binding(0) var<storage, read> X: array<f32>;
+@group(0) @binding(1) var<storage, read_write> Y: array<f32>;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x;
+  if (i >= arrayLength(&X)) { return; }
+  Y[2u * i] = exp(X[i]);
+  Y[2u * i + 1u] = expf(X[i]);
+}
+`;
+
+export async function expErrors(m = 4096) {
+  const { device, pipelineFor } = await context();
+  const pipeline = pipelineFor(EXP_TEST_WGSL);
+  const X = Float32Array.from({ length: m }, (_, i) => -34 + (34.2 * i) / (m - 1));
+  const xb = storage(device, X);
+  const yb = storage(device, new Float32Array(2 * m), GPUBufferUsage.COPY_SRC);
+  const group = device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [xb, yb].map((buffer, binding) => ({ binding, resource: { buffer } })),
+  });
+  const encoder = device.createCommandEncoder();
+  const pass = encoder.beginComputePass();
+  pass.setPipeline(pipeline);
+  pass.setBindGroup(0, group);
+  pass.dispatchWorkgroups(Math.ceil(m / 64));
+  pass.end();
+  const Y = await readback(device, encoder, yb, 2 * m);
+  xb.destroy();
+  yb.destroy();
+  let builtin = 0, ours = 0;
+  X.forEach((x, i) => {
+    const t = Math.exp(x);
+    builtin = Math.max(builtin, Math.abs(Y[2 * i] / t - 1));
+    ours = Math.max(ours, Math.abs(Y[2 * i + 1] / t - 1));
+  });
+  return { builtin, ours };
 }

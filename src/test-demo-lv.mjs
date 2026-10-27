@@ -1,6 +1,6 @@
 // node src/test-demo-lv.mjs [shots dir] — panel 15 (LOCAL VOL) of the demo in headless
 // Chromium on its software GPU, driven like a user: the expiry slider over 3, 7, 28 and
-// 98 days, and both model-risk chips. At each expiry the GPU reprices up to 15
+// 98 days, and both model-risk chips. At each expiry the GPU reprices up to 16
 // liquid SPY quotes under local vol and turns them back into implied vols: the worst
 // round-trip error must stay under 0.1 vol points and within 0.01 vol points of
 // Python's on the same grid. Needs npm run build and playwright, as src/test-gpu.mjs

@@ -5,7 +5,7 @@
 //          in the put wing. This is the variable-width step the GPU runs.
 //   trip   round trip: the expiry's quotes priced under local vol and turned back into
 //          implied vol, minus the surface they came from. Dots: Python at the GPU's
-//          settings, every quote; amber: the GPU, live, on up to 15 liquid strikes.
+//          settings, every quote; amber: the GPU, live, on up to 16 liquid strikes.
 //   risk   Stage 4: Part 1's barrier options on SPY under Black-Scholes at the
 //          at-the-money vol, a fitted Merton and local vol, which all fit the vanillas.
 import { lvTable, rowBlend, interp, lvJob, impliedVol } from "./lv.js";
