@@ -433,8 +433,11 @@ Getting 32-bit floats within 1e-4 took four changes:
 
 | Check (`/check.html?only=lv`, per $100 of forward) | Software GPU (SwiftShader) | Mac |
 | --- | --- | --- |
-| 12 flat-vol prices (28 and 342 days) vs Python and Black-Scholes | worst **8.1e-6** | not yet rerun (before the fix: 1.44e-4, 1 of 32 failed) |
-| 20 local-vol prices, 5 expiries from 3 to 342 days, strikes −2.5 to +1 sd | worst **7.5e-6** | not yet rerun (before the fix: 5.7e-5) |
+| 12 flat-vol prices (28 and 342 days) vs Python and Black-Scholes | worst **8.1e-6** | worst **8.8e-6** (before the fix: 1.44e-4, 1 of 32 failed) |
+| 20 local-vol prices, 5 expiries from 3 to 342 days, strikes −2.5 to +1 sd | worst **7.5e-6** | worst **2.3e-6** (before the fix: 5.7e-5) |
+| Time on the GPU, 342 days (957 steps over 2,814 spots): 6 flat-vol strikes / 4 local-vol strikes | | 82 ms / 569 ms |
+
+The Mac run is in `reference/lv_gpu_mac.txt`. The local-vol job takes longer than the flat one because the wings, where local vol is held at up to 300%, need kernels up to 16 times wider.
 
 ### In the demo
 
