@@ -14,6 +14,7 @@ import { priceChainGPU, chainJobs, runJobsCPU } from "./chain.js";
 import { marketOdds, DROP } from "./odds.js";
 import { Camera, fit, TEXT } from "./wire.js";
 import { initTwoStock } from "./twostock.js";
+import { initLocalVol } from "./localvol.js";
 import { drawScene, toMesh, maskToMesh, MESH_S } from "./scene.js";
 import {
   drawPad, padXY, drawKernel, drawCoil, drawExercise, drawError, drawBars, drawBarrierView, drawMethod, drawMirrors,
@@ -1279,6 +1280,7 @@ async function start() {
   changed();
   reodds();
   initTwoStock({ gpu: useGPU });
+  initLocalVol({ gpu: useGPU });
   loadChain();
 }
 
