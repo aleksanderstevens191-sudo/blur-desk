@@ -14,7 +14,7 @@ expiry back to today:
     -dV/dt = mu V_x + (sigma^2/2) V_xx - r V.
 
 A diffusion model blurs a density. The variance-exploding (VE) SDE of Song et al.
-(2021, eq. 9 / 30) has no drift:
+(2021, eq. 9) has no drift:
     dx = sqrt(d[sigma^2(t)]/dt) dw,   sigma(t) = sigma_min (sigma_max/sigma_min)^t,
 so x(t) = x(0) + N(0, sigma^2(t) - sigma^2(0)) and the density at t is the data
 density convolved with that Gaussian. On a grid, q_k = sum_j w_j p_{k-j}: the
@@ -39,7 +39,7 @@ so x_t = sqrt(abar_t) x_0 + sqrt(1 - abar_t) eps, abar_t = prod (1 - beta_s); in
 continuous time the VP SDE dx = -beta(t)/2 x dt + sqrt(beta(t)) dw (Song et al.
 2021, eq. 11), an Ornstein-Uhlenbeck process. Divided by sqrt(abar_t) it is the VE
 process with sigma^2 = (1 - abar_t)/abar_t (Song et al. 2021, App. B; Karras et al.
-2022, eq. 4-5). See shrink_vs_bs() for how that compares to drift and discounting.
+2022, Table 1). diffusion_stage1.py, section 5, compares it to drift and discounting.
 
 The market's density is the market odds panel's (panel 13, src/odds.js): the SPY
 Merton fit (spy_fit.json), read off its blurred call prices by Breeden-Litzenberger.
@@ -139,7 +139,7 @@ def ve_sigma(t, smin, smax):
 
 def ve_chain(p0, dx, smin, smax, N, keep=()):
     """Run the VE forward process on a grid density: N steps of the SMLD/VE chain
-    x_i = x_{i-1} + sqrt(sigma_i^2 - sigma_{i-1}^2) z (Song et al. 2021, eq. 6 / App. B),
+    x_i = x_{i-1} + sqrt(sigma_i^2 - sigma_{i-1}^2) z (Song et al. 2021, eq. 8),
     each one a Gaussian blur of the density. keep: step numbers to return."""
     sig = ve_sigma(np.arange(N + 1) / N, smin, smax)
     p, out = p0.copy(), {}
