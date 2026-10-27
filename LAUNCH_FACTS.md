@@ -151,14 +151,15 @@ Commits are on branch `part4-localvol` until it merges. The Oct 23 2026 SPY chai
 | L14 | The 64-bit JS step vs Python, 32 fixtures | worst 2.3e-10 | ⚠ cloud | `src/test-lv.mjs` (CI) |
 | L15 | The WGSL step vs Python, per $100 of forward: 12 flat-vol / 20 local-vol prices, 3 to 342 days | worst **8.8e-6 / 2.3e-6**, all 32 PASS (before dd39708: 1.44e-4, 31 of 32) | Mac, 2026-10-27 | `reference/lv_gpu_mac.txt` (dd39708); SwiftShader in CI: 8.1e-6 / 7.5e-6 |
 | L15b | The same check's GPU time at 342 days (957 steps, 2,814 spots): 6 flat-vol / 4 local-vol strikes | 82 ms / 569 ms | Mac, 2026-10-27 | same |
-| L16 | Demo panel 15, live GPU round trip at 3, 7, 28 and 98 days (16 liquid strikes each) | worst **0.071 vol pts**; GPU vs Python on the same grid ≤ 0.0001 | ⚠ cloud (SwiftShader) | `src/test-demo-lv.mjs` (CI) |
+| L16 | Demo panel 15, live GPU round trip at 7 / 28 / 98 days (16 liquid strikes each) | worst **0.015 / 0.071 / 0.046 vol pts**; GPU vs Python on the same grid 0.0001 at each | Mac, 2026-10-27 (blur-desk.vercel.app) | `reference/lv_demo_mac.txt`, from Alek's screenshots; SwiftShader in CI, 3 to 98 days: worst 0.071, ≤ 0.0001 |
 | L17 | The same at 819 days (1,434 steps) | GPU vs Python 0.0048 vol pts | ⚠ cloud (SwiftShader) | `src/test-demo-lv.mjs` run by hand |
-| L18 | Reprice time for panel 15 on a real GPU | ⚠ **never measured** | | |
+| L18 | Panel 15's reprice time at 7 / 28 / 98 days (160 / 384 / 608 steps over 2,814 spots, 16 strikes) | **177 / 412 / 816 ms** (SwiftShader: 43 / 94 / 132 s) | Mac, 2026-10-27 | same |
 
 ## Still to measure on the Mac
 
 1. QuantLib barriers on all cores, if you want a barrier ratio against all cores (Q3).
 2. Panel 14 on the Mac (T14): the live errors and the reprice time. Open the demo, scroll to 14 / TWO STOCKS and read the numbers off the panel.
-3. Panel 15 / LOCAL VOL on the Mac (L16, L18): at a few expiries, read the round trip, the GPU vs Python gap and the milliseconds off the panel. (`/check.html?only=lv` is done: L15, all PASS on 2026-10-27.)
+
+Done on 2026-10-27: `/check.html?only=lv` (L15, all PASS) and panel 15 at 7, 28 and 98 days (L16, L18).
 
 Done on 2026-10-24: `/check.html?only=fixtures` (A8, A9, B4) and `/check.html?only=odds` (O1–O8), both all PASS, the demo's top bar and error counter (A2, A10, C7, C10) from Alek's screen recording, and the 15-second clip from `/?record=1` (A7, `docs/blur-desk-15s.mp4`).

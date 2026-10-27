@@ -1,0 +1,15 @@
+Demo panel 15 / LOCAL VOL on Alek's Mac (apple metal-3, Chrome), 2026-10-27 about 16:35 UTC.
+Source: blur-desk.vercel.app (production, deployed from main at 0b691f7), read off three screenshots
+of the panel's side column. The panel opens at 28 days; Alek moved the expiry slider to 7 days, then
+98 days, then back to 28 days, so every reading below came after the shader was compiled. 3 days was
+not read. Each reprice is 16 liquid strikes, a variable-width blur over 2,814 spots, 1 day or less a step.
+
+expiry      steps  worst round trip  GPU vs Python, same grid  GPU time  Python, all liquid quotes of the expiry
+2026-10-30   160   0.015 vol pts     0.0001 vol pts            177 ms    63 quotes, worst 0.015
+2027-01-29   608   0.046 vol pts     0.0001 vol pts            816 ms    81 quotes, worst 0.046
+2026-11-20   384   0.071 vol pts     0.0001 vol pts            412 ms    132 quotes, worst 0.071
+
+Whole chain (Python, the same on every machine): 2,457 liquid quotes, worst 0.077, RMS 0.017 vol pts.
+
+The same panel on SwiftShader (src/test-demo-lv.mjs, /mnt/project-files/localvol/stage5-demo-check.txt):
+7 days 0.014 / 0.0001 / 42,726 ms; 28 days 0.071 / 0.0001 / 94,270 ms; 98 days 0.046 / 0.0001 / 131,593 ms.

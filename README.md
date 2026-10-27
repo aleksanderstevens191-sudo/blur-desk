@@ -449,6 +449,8 @@ The Mac run is in `reference/lv_gpu_mac.txt`. The local-vol job takes longer tha
 
 `src/test-demo-lv.mjs` drives the panel at 3, 7, 28 and 98 days. Each live round trip must be under 0.1 vol points and within 0.01 of Python. On SwiftShader the worst round trip was 0.071 vol points, and the GPU and Python differed by at most 0.0001.
 
+On Alek's Mac the round trips were 0.015, 0.071 and 0.046 vol points at 7, 28 and 98 days, each 0.0001 from Python, and the panel repriced its 16 strikes in 177, 412 and 816 ms. SwiftShader takes 43, 94 and 132 seconds for the same work. The readings are in `reference/lv_demo_mac.txt`.
+
 ![Panel 15 of the demo](docs/demo_local_vol.png)
 
 ## What GitHub Actions checks
