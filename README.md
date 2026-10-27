@@ -2,6 +2,16 @@
 
 [![checks](https://github.com/aleksanderstevens191-sudo/blur-desk/actions/workflows/checks.yml/badge.svg)](https://github.com/aleksanderstevens191-sudo/blur-desk/actions/workflows/checks.yml)
 
+## What's in here
+
+**Live demo:** https://blur-desk.vercel.app (prices on your GPU through WebGPU, with a CPU fallback)
+
+1. **[Pricing by blur](#results-so-far-cpu-reference):** Black-Scholes and American options as a Gaussian blur of the payoff, on the GPU, within $0.000013 of the closed form.
+2. **[Barriers, fat tails and the real SPY chain](#barrier-options):** [knock-outs](#barrier-options), [jump kernels and the smile](#fat-tails-and-the-smile), [all 4,738 SPY contracts in one GPU submit](#the-whole-spy-chain) and [the market's odds](#the-markets-odds).
+3. **[Two stocks](#two-stocks):** a 2D blur tilted by correlation prices exchange, best-of and spread options within 2e-7 of Margrabe, Stulz and QuantLib.
+4. **[Local volatility](#local-volatility):** a blur whose width changes with spot and time, fitted to every liquid SPY vanilla within 0.073 vol points.
+5. **[Diffusion models](#diffusion-models):** blur the market's odds into noise and run a diffusion sampler back to them, within 2e-5, with no network.
+
 The blur filter in a photo app can price stock options.
 
 An option's price is its payoff, blurred. Blurring an image and pricing an option solve the same equation (the heat equation), so the same Gaussian blur that softens a photo turns a sharp payoff into a smooth price curve.
@@ -513,6 +523,8 @@ The Mac readings are in `reference/diffusion_mac.txt`.
 
 On Alek's Mac the panel read 5.4e-5 with the slider all the way right and 4.4e-7 all the way left. It built its 129 levels in 380 ms and ran the 65,536 points back in 11 ms. The run starts from the same seeded points on every machine, and it gave the same KS result as SwiftShader (D 0.0038, p 0.31) and the same 7.44%.
 
+`/?record=2` plays the panel as a 15-second clip in the same 1080 × 1080 frame as `/?record=1`: the slider blurs the Dec 18 odds into noise, Play runs 65,536 points back from the same seed, and it holds on the read-off (7.44% rebuilt against the market's 7.62%). Every number in it is computed as it plays.
+
 ![Panel 16 of the demo](docs/demo_diffusion.png)
 
 ## What GitHub Actions checks
@@ -643,6 +655,7 @@ npm run dev        # open the printed URL in a WebGPU browser (Chrome, Edge, Saf
                    # /            the interactive demo
                    # /?record=1   the 15-second clip in a 1080 x 1080 frame (space plays, R resets;
                    #              &autoplay=1 starts when ready, &scale=0.5 for 1080 device px on a 2x screen)
+                   # /?record=2   the same frame on panel 16: blur the odds into noise, Play rebuilds them
                    # /check.html  the GPU vs Python fixture check
                    #              (?only=fixtures, fft, kernels, chain, odds, 2d, lv or diffusion for one section)
                    # /bench.html  the barrier benchmark

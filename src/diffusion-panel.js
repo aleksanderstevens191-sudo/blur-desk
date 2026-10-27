@@ -12,7 +12,7 @@
 import SPY from "./spy_fit.json";
 import { PANEL, market, grid, levels, mixture, mixPdf, mixCdf, blurCPU, payoffCPU, blackCall, startPoints, ksTest } from "./diffusion.js";
 import { diffusionGPU, payoffGPU, KEEP } from "./gpu-diffusion.js";
-import { glow, label, fit, WHITE, AMBER } from "./wire.js";
+import { glow, label, fit, WHITE, AMBER, TEXT } from "./wire.js";
 
 const $ = (id) => document.getElementById(id);
 const TOL = 1e-4;
@@ -28,7 +28,7 @@ let st = { j: 48, pure: false };
 let pay = new Map();                                // level -> prices per $100 of forward
 let qCPU = new Map();
 let live = null, busy = false, again = false, asked = 0;
-let run = null, playing = null, seed = 16, tablesMs = 0;
+let run = null, playing = null, seed = 16, tablesMs = 0, plays = 0, prefetching = null;
 
 const qRow = (j) => (gpu ? gpu.Q.subarray(j * G.n, (j + 1) * G.n) : qCPU.get(j));
 const sdOf = (j) => lev.s[j];
@@ -88,16 +88,19 @@ async function reprice() {
 
 // ---------- the reverse run ----------
 
-async function play() {
+// t0: when the walk back starts (performance.now() time); the recording passes its own clock
+async function play(t0) {
   if (!gpu || playing) return null;
+  const n = ++plays;
   const x1 = startPoints(NP, P, { pure: st.pure, seed: ++seed });
   const r = await gpu.sampler(x1);
+  if (n !== plays) return null;                     // reset while the GPU was busy
   const final = r.levels[0];
   const ks = ksTest(final, (v) => mixCdf(v, comps0));
   const down = Math.log((0.9 * P.spot) / P.S);
   const pDown = final.reduce((a, v) => a + (v < down), 0) / NP;
   run = { levels: r.levels, ms: r.ms, ks, pDown, mDown: mixCdf(down, comps0), pure: st.pure, n: NP };
-  playing = { t0: performance.now() };
+  playing = { t0: t0 ?? performance.now() };
   $("dfPlay").disabled = true;
   return run;
 }
@@ -140,7 +143,8 @@ async function prefetch() {
 
 // ---------- drawing ----------
 
-const box = (W, H) => ({ x0: 34, y0: 18, x1: W - 8, y1: H - 18 });
+// the margins grow with the labels (the recordings draw them 1.6x)
+const box = (W, H) => ({ x0: 34 * TEXT.scale, y0: 18 * TEXT.scale, x1: W - 8, y1: H - 18 * TEXT.scale });
 
 function drawPay() {
   const cv = $("dfPay"), ctx = cv.getContext("2d");
@@ -164,12 +168,15 @@ function drawPay() {
   ax.lineTo(b.x1, b.y1);
   glow(ctx, ax, WHITE, 0.3, 1, 0);
   for (const v of [100, 200, 300, 400]) label(ctx, `$${v}`, b.x0 - 4, yOf(v), { size: 8, align: "right", alpha: 0.5 });
+  label(ctx, `PAYOFF → PRICE · CALL $770 · r = 0 · ${(100 * P.flat).toFixed(1)}% VOL × ${horizon(sdOf(st.j))}`, b.x0, 8, { size: 8, align: "left", alpha: 0.6, max: W - b.x0 - 2 });
+  label(ctx, "SPY FORWARD →", b.x1, b.y1 + 9 * TEXT.scale, { size: 8, align: "right", alpha: 0.45 });
+  const fwdAt = b.x1 - ctx.measureText("SPY FORWARD →").width - 6;
   for (const usdX of [650, 700, 770, 850]) {
     const x = Math.log(usdX / P.F);
-    if (x > X_LO && x < X_HI) label(ctx, `$${usdX}`, xOf(x), b.y1 + 9, { size: 8, alpha: usdX === 770 ? 0.8 : 0.5 });
+    if (x <= X_LO || x >= X_HI) continue;
+    if (xOf(x) + ctx.measureText(`$${usdX}`).width / 2 > fwdAt) break;   // it would run into the label
+    label(ctx, `$${usdX}`, xOf(x), b.y1 + 9 * TEXT.scale, { size: 8, alpha: usdX === 770 ? 0.8 : 0.5 });
   }
-  label(ctx, `PAYOFF → PRICE · CALL $770 · r = 0 · ${(100 * P.flat).toFixed(1)}% VOL × ${horizon(sdOf(st.j))}`, b.x0, 8, { size: 8, align: "left", alpha: 0.6, max: W - b.x0 - 2 });
-  label(ctx, "SPY FORWARD →", b.x1, b.y1 + 9, { size: 8, align: "right", alpha: 0.45 });
 }
 
 function drawDen() {
@@ -222,10 +229,10 @@ function drawDen() {
     glow(ctx, p, AMBER, 0.9, 1, 0.5);
   }
   for (const d of [0.01, 0.1, 1, 10]) label(ctx, String(d), b.x0 - 4, yOf(d), { size: 8, align: "right", alpha: 0.5 });
-  for (const y of [-1, -0.5, 0, 0.5]) label(ctx, y.toFixed(1), xOf(y), b.y1 + 9, { size: 8, alpha: 0.5 });
+  for (const y of [-1, -0.5, 0, 0.5]) label(ctx, y.toFixed(1), xOf(y), b.y1 + 9 * TEXT.scale, { size: 8, alpha: 0.5 });
   label(ctx, `MARKET ODDS ${P.expiry} → NOISE · σ ${lev.sig[st.j].toFixed(3)}`, b.x0, 8, { size: 8, align: "left", alpha: 0.6 });
   if (run) label(ctx, playing ? "● REVERSE RUN" : "● RUN BACK", b.x1, 8, { size: 8, align: "right", rgb: AMBER, alpha: 0.95 });
-  label(ctx, "LN S_T/S →", b.x1, b.y1 + 9, { size: 8, align: "right", alpha: 0.45 });
+  label(ctx, "LN S_T/S →", b.x1, b.y1 + 9 * TEXT.scale, { size: 8, align: "right", alpha: 0.45 });
 }
 
 function show() {
@@ -302,7 +309,7 @@ export async function initDiffusion({ gpu: useGPU = true } = {}) {
       gpu = await diffusionGPU(G, lev);
       tablesMs = performance.now() - t0;
       $("dfPlay").disabled = false;
-      prefetch().catch(() => {});
+      prefetching = prefetch().catch(() => {});
     } catch (err) {
       failure = err;
       gpuOK = false;
@@ -310,6 +317,34 @@ export async function initDiffusion({ gpu: useGPU = true } = {}) {
   }
   reprice();
 }
+
+// ?record=2 (demo.js) drives the panel through these
+export const recorder = {
+  NP,
+  get run() { return run; },
+  get playing() { return !!playing; },
+  get expiry() { return P.expiry; },
+  // the score tables and every level's price, so the sweep never waits on the GPU
+  async warm() {
+    if (!gpu) throw failure || new Error("WEBGPU NEEDED FOR THE REVERSE RUN");
+    await prefetching;
+  },
+  // back to the first run's seed (17), so every take rebuilds the same points
+  reset() {
+    plays++;
+    playing = null;
+    run = null;
+    seed = 16;
+    st.pure = false;
+    for (const c of document.querySelectorAll("[data-dfs]")) c.setAttribute("aria-pressed", String(c.dataset.dfs === "0"));
+    $("dfPlay").disabled = !gpu;
+    setLevel(0);
+  },
+  setLevel(j) {
+    if (j !== st.j) setLevel(j);
+  },
+  play: (t0) => play(t0),
+};
 
 // for the headless check (live.seq === asked with busy false: live answers the latest request)
 window.diffusion = {

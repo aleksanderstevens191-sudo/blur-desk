@@ -15,7 +15,8 @@ import { marketOdds, DROP } from "./odds.js";
 import { Camera, fit, TEXT } from "./wire.js";
 import { initTwoStock } from "./twostock.js";
 import { initLocalVol } from "./localvol.js";
-import { initDiffusion } from "./diffusion-panel.js";
+import { initDiffusion, recorder } from "./diffusion-panel.js";
+import { PANEL } from "./diffusion.js";
 import { drawScene, toMesh, maskToMesh, MESH_S } from "./scene.js";
 import {
   drawPad, padXY, drawKernel, drawCoil, drawExercise, drawError, drawBars, drawBarrierView, drawMethod, drawMirrors,
@@ -1170,6 +1171,129 @@ async function recWarm() {
   if (params.get("autoplay") === "1") recPlay();
 }
 
+// ---- ?record=2: panel 16 in the same 1080 x 1080 frame, 15 seconds ----
+// Blur the market's Dec 18 odds into noise with the slider (the call's payoff melts
+// into its price beside them), press Play to run 65,536 points of that noise back,
+// then hold on the read-off. The slider is a function of the time since PLAY and the
+// reverse run starts from the same seed (17) every take, so a replay repeats it; every
+// number on screen comes from the panel as it runs. Same keys and &autoplay / &scale.
+const REC2_ON = params.get("record") === "2";
+const REC2_STEPS = [
+  { at: 0, step: "01", text: () => `THE MARKET'S ODDS FOR ${recorder.expiry}, FROM SPY OPTION PRICES` },
+  { at: 1.2, step: "02", text: () => "BLUR THEM INTO NOISE · THE SAME BLUR PRICES A CALL" },
+  { at: 6.0, step: "03", text: () => `PLAY: ${recorder.NP.toLocaleString("en-US")} POINTS RUN BACK · EXACT SCORE, NO NETWORK` },
+  { at: 10.4, step: "04", text: () => "THE ODDS, REBUILT FROM THE NOISE" },
+];
+const REC2_SWEEP = [1.2, 5.6]; // the slider walks from no blur to sigma 1
+const REC2_PLAY = 6.0;
+const rec2 = { playing: false, t0: 0, t: 0, phase: -1, played: false, ready: false };
+
+function rec2Show() {
+  const r = recorder.run;
+  const read = $("rec2Read");
+  if (!r || recorder.playing) {
+    read.classList.remove("show");
+    return;
+  }
+  read.innerHTML = `P(SPY FALLS > 10%)<br>BY ${recorder.expiry}<br>REBUILT <b>${(100 * r.pDown).toFixed(2)}%</b><br>MARKET <b>${(100 * r.mDown).toFixed(2)}%</b>` +
+    `<small>${r.n.toLocaleString("en-US")} POINTS · KS p ${r.ks.p.toFixed(2)}<br>RISK-NEUTRAL, NOT A FORECAST</small>`;
+  read.classList.add("show");
+}
+
+function rec2Apply(t) {
+  const phase = REC2_STEPS.filter((s) => t >= s.at).length - 1;
+  if (phase !== rec2.phase) {
+    rec2.phase = phase;
+    $("recStep").textContent = REC2_STEPS[phase].step;
+    $("recCap").textContent = REC2_STEPS[phase].text();
+  }
+  if (t < REC2_PLAY) {
+    recorder.setLevel(Math.round(PANEL.N * ease((t - REC2_SWEEP[0]) / (REC2_SWEEP[1] - REC2_SWEEP[0]))));
+  } else if (!rec2.played) {
+    rec2.played = true;
+    recorder.play(rec2.t0 + REC2_PLAY * 1000).catch((err) => ($("recHint").textContent = `GPU ERROR: ${err.message}`));
+  }
+  rec2Show();
+}
+
+function rec2Reset() {
+  rec2.playing = false;
+  rec2.played = false;
+  rec2.t = 0;
+  rec2.phase = -1;
+  recorder.reset();
+  rec2Apply(0);
+}
+
+function rec2Play() {
+  rec2Reset();
+  rec2.playing = true;
+  rec2.t0 = performance.now();
+  $("recHint").textContent = "PLAYING · SPACE REPLAYS · R RESETS";
+}
+
+function rec2Frame(ms) {
+  if (rec2.playing) {
+    rec2.t = Math.min(REC_END, Math.max(0, (ms - rec2.t0) / 1000));
+    rec2Apply(rec2.t);
+    if (rec2.t >= REC_END) {
+      rec2.playing = false;
+      $("recHint").textContent = "DONE · SPACE REPLAYS · R RESETS";
+    }
+  }
+  requestAnimationFrame(rec2Frame);
+}
+
+function rec2Layout() {
+  document.body.classList.add("rec", "rec2");
+  TEXT.scale = 1.6;
+  const stage = document.createElement("div");
+  stage.id = "rec";
+  stage.innerHTML = `<div class="recCap"><b id="recStep">01</b><span id="recCap">—</span><span class="recBrand">BLUR DESK</span></div>`;
+  const panel = $("dfPanel");
+  stage.append(panel);
+  const read = document.createElement("div");
+  read.id = "rec2Read";
+  read.className = "read";
+  panel.querySelector(".df").append(read);
+  const hint = document.createElement("div");
+  hint.id = "recHint";
+  hint.textContent = "GETTING READY…";
+  document.body.append(stage, hint);
+  const fitStage = () => {
+    const k = +params.get("scale") || Math.min(1, (innerWidth - 16) / 1080, (innerHeight - 40) / 1080);
+    stage.style.transform = `scale(${k})`;
+    hint.style.top = `${8 + 1080 * k + 8}px`;
+  };
+  addEventListener("resize", fitStage);
+  fitStage();
+  addEventListener("keydown", (e) => {
+    if (e.code === "Space" && rec2.ready) {
+      e.preventDefault();
+      rec2Play();
+    } else if (e.key === "r" || e.key === "R") {
+      rec2Reset();
+      if (rec2.ready) $("recHint").textContent = "READY · SPACE PLAYS 15 S · R RESETS";
+    }
+  });
+}
+
+// The score tables and all 129 levels' prices before the clip can start
+async function rec2Warm() {
+  await initDiffusion({ gpu: useGPU });
+  try {
+    await recorder.warm();
+  } catch (err) {
+    $("recHint").textContent = err.message.toUpperCase();
+    return;
+  }
+  rec2Reset();
+  rec2.ready = true;
+  $("recHint").textContent = "READY · SPACE PLAYS 15 S · R RESETS";
+  requestAnimationFrame(rec2Frame);
+  if (params.get("autoplay") === "1") rec2Play();
+}
+
 // ---- render loop ----
 const ctxs = {};
 for (const id of ["scene", "pad", "kernel", "coil", "exercise", "error", "bars", "barrier", "method", "mirrors", "logk", "smile", "chain", "odds"]) ctxs[id] = $(id).getContext("2d");
@@ -1195,7 +1319,7 @@ function frame(ms) {
 
   if (view.payoff) {
     const [W, H] = fit(scene, ctxs.scene);
-    cam.zoom = W / H < 1.2 ? 1.25 : Math.min(1.6, W / H);
+    cam.zoom = W < 500 ? 1.05 : W / H < 1.2 ? 1.25 : Math.min(1.6, W / H); // phones: keep the axis labels inside
     cam.setViewport(W, H, W / 2, H * 0.5);
     drawScene(ctxs.scene, cam, view, W, H, t);
   }
@@ -1269,6 +1393,11 @@ async function start() {
     useGPU = false;
     $("cGpu").textContent = "CPU FALLBACK";
     $("fGpu").textContent = e.message.toUpperCase();
+  }
+  if (REC2_ON) {
+    rec2Layout();
+    await rec2Warm();
+    return;
   }
   if (rec.on) {
     recLayout();

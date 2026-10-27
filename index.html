@@ -162,6 +162,23 @@
       #rec .read { position: absolute; left: 18px; top: 46px; max-width: 40%; font-size: 40px; line-height: 1.15; }
       #rec .read small { font-size: 18px; margin-top: 14px; }
       #recHint { position: fixed; left: 8px; color: var(--dim); font-size: 11px; }
+      /* ?record=2: panel 16 alone in the same frame */
+      body.rec2 #rec #dfPanel { flex: 1 1 auto; min-height: 0; }
+      body.rec2 #rec .df { flex: 1 1 auto; min-height: 0; position: relative; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr) 330px; grid-template-areas: "den den" "pay side"; gap: 12px; }
+      body.rec2 #rec #dfDen { grid-area: den; }
+      body.rec2 #rec #dfPay { grid-area: pay; }
+      body.rec2 #rec .df canvas { height: 100% !important; min-height: 0; }
+      body.rec2 #rec .df .side { grid-area: side; gap: 8px; }
+      body.rec2 #rec .df .side .rel { height: 52px; }
+      body.rec2 #rec .df .side .foot { font-size: 13px; }
+      body.rec2 #rec .big { font-size: 34px; }
+      body.rec2 #rec .sl { display: grid; grid-template-columns: 150px 1fr; font-size: 14px; }
+      body.rec2 #rec input { display: block; pointer-events: none; }
+      body.rec2 #rec .row { display: grid; grid-template-columns: 1fr; }
+      body.rec2 #rec .toggle { display: block; font-size: 15px; padding: 9px 0; pointer-events: none; }
+      body.rec2 #rec .toggle:disabled { opacity: 1; color: var(--bg); background: var(--amber); border-color: var(--amber); }
+      #rec #rec2Read { left: auto; right: 20px; top: 52px; max-width: 46%; text-align: right; font-size: 32px; opacity: 0; transition: opacity 0.45s ease; }
+      #rec #rec2Read.show { opacity: 1; }
 
       @media (max-width: 760px) {
         .studio { padding: 8px 8px 16px; }
@@ -182,6 +199,9 @@
         .panel #chain { height: 260px; }
         .panel #odds { height: 220px; }
         .read { position: static; max-width: none; font-size: 13px; }
+        .panel .foot { white-space: normal; flex-wrap: wrap; row-gap: 2px; }
+        .row { grid-template-columns: 1fr 1fr; }
+        #lvRisk { height: 440px !important; }
       }
     </style>
   </head>
