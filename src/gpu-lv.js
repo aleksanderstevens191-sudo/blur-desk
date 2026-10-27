@@ -13,10 +13,14 @@
 // An in-the-money strike is priced as its out-of-the-money twin plus put-call parity
 // (call - put = 1 - e^k per unit of forward): its value is mostly intrinsic, and carrying
 // that through hundreds of 32-bit steps cost up to 2e-4 per $100 on a 1-year flat vol.
+// Each batch also blurs a column of ones, which the exact blur leaves at 1. On the
+// Mac (Metal, fast math) it drifted down with every step, the same way every price
+// did: 1.44e-4 per $100 on a 1-year at-the-money put. Prices are divided by it.
 import { context, storage, readback, groups } from "./gpu.js";
 import { lastStep } from "./lv.js";
 
 export const MAXC = 16;
+export const STRIKES = MAXC - 1; // per batch: the last column is a constant 1 (see lvGPU)
 
 export const LV_STEP_WGSL = /* wgsl */ `
 struct Params { n: u32, C: u32, ra: u32, rb: u32, a: f32, h: f32, dx: f32, x0: f32 }
@@ -106,14 +110,15 @@ export async function lvGPU(job) {
   const SN = new Float32Array(job.SN.length * n);
   job.SN.forEach((row, r) => SN.set(row, r * n));
   const snBuf = storage(device, SN);
-  const prices = [];
+  const prices = [], drift = [];
   const t0 = performance.now();
   const last = job.steps.length - 1;
   const itm = job.strikes.map(({ k, call }) => (call ? k < 0 : k > 0));
   const sl = itm.some(Boolean) ? job.sigAt(last) : null;
   const V0s = job.V0.map((V, c) => (itm[c] ? lastStep(job.x, sl, job.steps[last].b - job.steps[last].a, job.strikes[c].k, !job.strikes[c].call) : V));
-  for (let c0 = 0; c0 < V0s.length; c0 += MAXC) {
-    const cols = V0s.slice(c0, c0 + MAXC);
+  const ones = new Float64Array(n).fill(1);
+  for (let c0 = 0; c0 < V0s.length; c0 += STRIKES) {
+    const cols = [...V0s.slice(c0, c0 + STRIKES), ones];
     const C = cols.length;
     const V0 = new Float32Array(C * n);
     cols.forEach((V, c) => V0.set(V, c * n));
@@ -139,13 +144,15 @@ export async function lvGPU(job) {
       [src, dst] = [dst, src];
     }
     const V = await readback(device, encoder, src, C * n);
-    for (let c = 0; c < C; c++) {
+    const one = V[(C - 1) * n + job.center];
+    for (let c = 0; c < C - 1; c++) {
       const { k, call } = job.strikes[c0 + c];
       const par = itm[c0 + c] ? (call ? 1 : -1) * (1 - Math.exp(k)) : 0;
-      prices.push(job.scale * (V[c * n + job.center] + par));
+      prices.push(job.scale * (V[c * n + job.center] / one + par));
     }
+    drift.push(one - 1);
     for (const buf of [a, b, ...uniforms]) buf.destroy();
   }
   snBuf.destroy();
-  return { prices, ms: performance.now() - t0 };
+  return { prices, ms: performance.now() - t0, drift };
 }

@@ -22,7 +22,7 @@ export async function lvChecks(log, TOL) {
     const c0 = cs[0];
     const ex = data.expiries[c0.i];
     const job = lvJob(data, { T: ex.T, D: ex.D, strikes: cs.map((c) => ({ k: c.k, call: c.call })), sigma: c0.model === "flat" ? c0.sigma : null });
-    const { prices, ms } = await lvGPU(job);
+    const { prices, ms, drift } = await lvGPU(job);
     cs.forEach((c, j) => {
       const d = Math.abs(prices[j] - c.py);
       const ok = d < TOL;
@@ -31,7 +31,7 @@ export async function lvChecks(log, TOL) {
         : `  vol ${(100 * impliedVol(prices[j] / job.scale, c.k, ex.T, c.call)).toFixed(3)} (surface ${(100 * c.iv_surface).toFixed(3)})`;
       log(`${ok ? "PASS" : "FAIL"} ${c.model.padEnd(4)} ${ex.name} k ${c.k.toFixed(4).padStart(7)} ${c.call ? "call" : "put "}` +
         ` gpu=${prices[j].toFixed(6)} py=${c.py.toFixed(6)} |gpu-py|=${e(d)}${extra}` +
-        (j === 0 ? `  (${job.steps.length} steps, ${cs.length} strikes, ${ms.toFixed(0)} ms)` : ""));
+        (j === 0 ? `  (${job.steps.length} steps, ${cs.length} strikes, ${ms.toFixed(0)} ms; ones column ${e(drift[0])} from 1, divided out)` : ""));
     });
   }
   return fails;

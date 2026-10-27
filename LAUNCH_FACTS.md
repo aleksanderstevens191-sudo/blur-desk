@@ -150,7 +150,7 @@ Commits are on branch `part4-localvol` until it merges. The Oct 23 2026 SPY chai
 | L13 | Barrier checks: vs Reiner-Rubinstein / Monte Carlo (400k paths) / QuantLib's local-vol barrier engine | $2.6e-4 / within about 1 se / $0.022 | ⚠ cloud | same |
 | L14 | The 64-bit JS step vs Python, 32 fixtures | worst 2.3e-10 | ⚠ cloud | `src/test-lv.mjs` (CI) |
 | L15 | The WGSL step vs Python, per $100 of forward: 12 flat-vol / 20 local-vol prices, 3 to 342 days | worst **4.4e-5 / 1.0e-5** | ⚠ cloud (SwiftShader) | `/check.html?only=lv`, `src/test-gpu.mjs lv` (CI) |
-| L16 | Demo panel 15, live GPU round trip at 3, 7, 28 and 98 days (16 liquid strikes each) | worst **0.071 vol pts**; GPU vs Python on the same grid ≤ 0.0001 | ⚠ cloud (SwiftShader) | `src/test-demo-lv.mjs` (CI) |
+| L16 | Demo panel 15, live GPU round trip at 3, 7, 28 and 98 days (15 liquid strikes each) | worst **0.071 vol pts**; GPU vs Python on the same grid ≤ 0.0001 | ⚠ cloud (SwiftShader) | `src/test-demo-lv.mjs` (CI) |
 | L17 | The same at 819 days (1,434 steps) | GPU vs Python 0.0048 vol pts | ⚠ cloud (SwiftShader) | `src/test-demo-lv.mjs` run by hand |
 | L18 | Reprice time for panel 15 on a real GPU | ⚠ **never measured** | | |
 

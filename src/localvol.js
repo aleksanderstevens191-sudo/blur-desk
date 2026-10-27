@@ -5,11 +5,11 @@
 //          in the put wing. This is the variable-width step the GPU runs.
 //   trip   round trip: the expiry's quotes priced under local vol and turned back into
 //          implied vol, minus the surface they came from. Dots: Python at the GPU's
-//          settings, every quote; amber: the GPU, live, on up to 16 liquid strikes.
+//          settings, every quote; amber: the GPU, live, on up to 15 liquid strikes.
 //   risk   Stage 4: Part 1's barrier options on SPY under Black-Scholes at the
 //          at-the-money vol, a fitted Merton and local vol, which all fit the vanillas.
 import { lvTable, rowBlend, interp, lvJob, impliedVol } from "./lv.js";
-import { lvGPU, MAXC } from "./gpu-lv.js";
+import { lvGPU, STRIKES } from "./gpu-lv.js";
 import { glow, label, fit, WHITE, AMBER, RED } from "./wire.js";
 
 const $ = (id) => document.getElementById(id);
@@ -241,8 +241,8 @@ function drawRisk() {
 function strikesFor(e) {
   const ex = data.expiries[e];
   const liq = ex.k.map((k, j) => j).filter((j) => ex.liq[j] && ex.err[j] != null);
-  if (liq.length <= MAXC) return liq;
-  return Array.from({ length: MAXC }, (_, n) => liq[Math.round((n * (liq.length - 1)) / (MAXC - 1))]);
+  if (liq.length <= STRIKES) return liq;
+  return Array.from({ length: STRIKES }, (_, n) => liq[Math.round((n * (liq.length - 1)) / (STRIKES - 1))]);
 }
 
 async function reprice() {
