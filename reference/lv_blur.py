@@ -107,13 +107,14 @@ def time_grid(T_points, dt, m=1):
     return np.array(out)
 
 
-def weights(x, sig, h, dx):
+def weights(x, sig, h, dx, drift=0.0):
     """Gather weights: for node i a Gaussian of variance sig_i^2 h about -sig_i^2 h / 2, sampled on the grid
     and normalised. Rows are grouped by kernel half-width (powers of two, out to TAPS_SD standard deviations),
-    so a 300% wing node does not make every 15% node pay for its taps. Returns (buckets, H_max), each bucket
+    so a 300% wing node does not make every 15% node pay for its taps. drift: an extra mean per step
+    (Merton's jump compensator). Returns (buckets, H_max), each bucket
     (row indices, weights (rows, 2 H + 1), H)."""
     s = sig * np.sqrt(h)
-    mu = -0.5 * s * s
+    mu = -0.5 * s * s + drift
     need = np.ceil((TAPS_SD * s + np.abs(mu)) / dx).astype(int) + 1
     Hb = 2 ** np.ceil(np.log2(np.maximum(need, 2))).astype(int)
     buckets = []
