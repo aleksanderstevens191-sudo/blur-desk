@@ -231,3 +231,80 @@ def tweedie_exact(x, comps, s2):
         num = num + pk * (m + v / (v + s2) * (x - m))
         den = den + pk
     return num / den
+
+
+# ---------- Stage 4: panel 16's algorithm, as the GPU runs it (src/diffusion.js, src/gpu-diffusion.js) ----------
+# The reverse run with fewer levels than Stage 2, so a browser can precompute every score table:
+#   grid      y_i = i dx, |i| <= half (dx 0.002, |y| <= 6), the market's density p0 and its central
+#             difference Dp0 (0 at the two end nodes)
+#   levels    sigma_j = sigma_min (sigma_max/sigma_min)^(j/N), j = 0..N; blur sd s_j = sqrt(sigma_j^2 - sigma_min^2)
+#   blur      q = sum_k w_k p0_(i-k) / sum_k w_k, w_k = exp(-(k dx)^2 / 2 s^2), |k| <= ceil(9 s / dx), zero
+#             outside the grid; q' the same blur of Dp0 (a derivative commutes with a blur)
+#   score     q'/q (0 where q <= 1e-30): every term of q is positive, so 32-bit q keeps its relative
+#             precision out in the tails, which log-then-difference would not
+#   sampler   Heun's method in ln sigma, level N down to 0, score interpolated linearly (clamped at the ends)
+#   payoff    the same Gaussian (sd s, centre -s^2/2: Black-Scholes at r = 0, on the forward) on its own taps
+#             k s/256, |k| <= 9 * 256, against the call payoff max(100 e^(x+y) - K, 0), weights normalised
+PANEL = dict(dx=0.002, half=3000, N=128, smin=0.01, smax=1.0, nsd=9.0, per=256, e=1)
+
+
+def panel_grid(P, C=PANEL):
+    y = np.arange(-C["half"], C["half"] + 1) * C["dx"]
+    p0 = mix_pdf(y, mixture(P))
+    dp = np.zeros_like(p0)
+    dp[1:-1] = (p0[2:] - p0[:-2]) / (2 * C["dx"])
+    return y, p0, dp
+
+
+def panel_levels(C=PANEL):
+    sig = C["smin"] * (C["smax"] / C["smin"]) ** (np.arange(C["N"] + 1) / C["N"])
+    s = np.sqrt(np.maximum(sig**2 - C["smin"] ** 2, 0.0))
+    s[0] = 0.0
+    return sig, s
+
+
+def panel_blur(p, s, C=PANEL):
+    if s == 0:
+        return p.copy()
+    H = int(np.ceil(C["nsd"] * s / C["dx"]))
+    k = np.arange(-H, H + 1) * C["dx"]
+    w = np.exp(-k * k / (2 * s * s))
+    return fftconvolve(p, w / w.sum())[H:H + len(p)]
+
+
+def panel_tables(p0, dp, s_list, C=PANEL):
+    """q and the score at every level (rows)."""
+    Q, SC = [], []
+    for s in s_list:
+        q, qd = panel_blur(p0, s, C), panel_blur(dp, s, C)
+        Q.append(q)
+        SC.append(np.where(q > 1e-30, qd / np.maximum(q, 1e-300), 0.0))
+    return np.array(Q), np.array(SC)
+
+
+def panel_sampler(x, y, SC, sig, keep=()):
+    """Heun's method on dx/d(ln sigma) = -sigma^2 score, from level N down to 0."""
+    N = len(sig) - 1
+    h = (np.log(sig[0]) - np.log(sig[-1])) / N
+    x = np.array(x, float)
+    out = {N: x.copy()}
+    for j in range(N, 0, -1):
+        k1 = -sig[j] ** 2 * np.interp(x, y, SC[j])
+        k2 = -sig[j - 1] ** 2 * np.interp(x + h * k1, y, SC[j - 1])
+        x = x + 0.5 * h * (k1 + k2)
+        if j - 1 in keep:
+            out[j - 1] = x.copy()
+    out[0] = x
+    return out
+
+
+def panel_payoff(x, s, K, C=PANEL):
+    """Undiscounted call (r = 0, per $100 of forward) at log-forward offsets x, blurred by sd s."""
+    x = np.asarray(x, float)
+    if s == 0:
+        return np.maximum(100 * np.exp(x) - K, 0.0)
+    H = int(C["nsd"] * C["per"])
+    k = np.arange(-H, H + 1) * (s / C["per"])
+    w = np.exp(-k * k / (2 * s * s))
+    w /= w.sum()
+    return np.maximum(100 * np.exp(x[:, None] - 0.5 * s * s + k[None, :]) - K, 0.0) @ w

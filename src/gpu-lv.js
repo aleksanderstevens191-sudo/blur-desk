@@ -28,7 +28,7 @@ export const STRIKES = MAXC;
 // exp with Cody-Waite reduction through fma, which fast math can't reassociate, and a
 // degree-7 polynomial: about 1 ulp at every argument. Metal's fast-math exp may be off by
 // up to 3 + |2x| ulp (about 8e-6 at the 8-sd tap, x = -32), which bends the kernel.
-const EXPF = /* wgsl */ `
+export const EXPF = /* wgsl */ `
 fn expf(x: f32) -> f32 {
   let k = round(x * 1.4426950409);
   var r = fma(-k, 0.693145751953125, x);

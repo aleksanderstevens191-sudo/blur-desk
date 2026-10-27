@@ -10,6 +10,7 @@ import { chainChecks } from "./chain-check.js";
 import { oddsChecks } from "./odds-check.js";
 import { twoStockChecks } from "./check-2d.js";
 import { lvChecks } from "./check-lv.js";
+import { diffusionChecks } from "./check-diffusion.js";
 import SPY from "./spy_fit.json";
 
 const TOL = 1e-4;
@@ -17,7 +18,7 @@ const out = document.getElementById("out");
 const log = (line = "") => (out.textContent += line + "\n");
 // /check.html?only=fft runs just the FFT section, ?only=kernels the fat-tailed kernels,
 // ?only=chain the full SPY chain, ?only=odds the market's odds, ?only=2d the two-stock blur,
-// ?only=lv the local-vol blur
+// ?only=lv the local-vol blur, ?only=diffusion panel 16 (the market's odds to noise and back)
 const only = new URLSearchParams(location.search).get("only");
 const run = (section) => !only || only === section;
 
@@ -101,6 +102,10 @@ async function main() {
   if (run("lv")) {
     log("\nlocal vol: the variable-width blur on the GPU vs Python (reference/make_lv_data.py):");
     fails += await lvChecks(log, TOL);
+  }
+  if (run("diffusion")) {
+    log("\ndiffusion: the market's odds blurred to noise and run back, the payoff blurred alike, GPU vs Python (reference/make_diffusion_fixtures.py):");
+    fails += await diffusionChecks(log, TOL);
   }
   log(fails ? `\n${fails} failed` : `\nall GPU results within 1e-4 of the Python reference${run("fft") ? ", FFT within 1e-4 of direct" : ""}`);
   document.title = fails ? "FAIL" : "PASS";
