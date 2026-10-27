@@ -11,6 +11,7 @@ An option's price is its payoff, blurred. Blurring an image and pricing an optio
 - **American options:** blur one small time step, discount, clip to the payoff, repeat.
 - **Crashes and the smile:** swap the Gaussian for a kernel with fat tails (Merton jumps, variance gamma) and the same blur prices a market that can jump. Read the prices back as Black-Scholes vols and out comes the volatility smile, fitted here to real SPY options.
 - **Two stocks:** blur a payoff drawn on S1 × S2 with an ellipse that the correlation tilts, and out come exchange, best-of and spread options (within 2e-7 of Margrabe, Stulz and QuantLib).
+- **Local volatility:** give every spot and every day its own blur width, fitted so every liquid SPY vanilla comes back within 0.073 vol points, and watch barrier prices move by up to $31 between models fitted to the same vanillas.
 - **The market's odds:** run the edge-detect kernel `[1, -2, 1]` across a row of call prices and out comes the probability distribution the market is pricing (Breeden–Litzenberger, 1978).
 
 **Try it:** https://blur-desk.vercel.app · **Watch:** [the 15-second clip](docs/blur-desk-15s.mp4), recorded on a Mac with `/?record=1`
@@ -373,16 +374,93 @@ Every move reprices a 25 × 25 patch of spot pairs on the GPU (FFT or direct). T
 
 ![Panel 14 of the demo: the exchange option at ρ = 0.9, the blur's ellipses turned onto the diagonal](docs/demo_two_stocks.png)
 
+## Local volatility
+
+Black-Scholes blurs with one width everywhere. SPY's smile says that's wrong: the market prices more movement when SPY is low than when it is high. Local volatility gives every spot price and every date its own vol, σ(S, t), chosen so that every vanilla on the chain comes back at its market price (Dupire, 1994). In blur terms, the kernel's width changes from pixel to pixel. Pricing becomes many small blurs, one per day, where each spot is smeared by an amount set by the local vol at that spot and time.
+
+### From quotes to a clean surface
+
+1. **The surface.** Raw SVI is fitted to each of the 32 expiries of the Oct 23 chain (3,320 out-of-the-money quotes, 3 to 819 days). Fitted freely, 25 of the 32 slices have butterfly arbitrage (the edge-detect density goes negative somewhere) and 16 of 31 neighbouring pairs have calendar arbitrage (total variance falls with expiry somewhere), almost all of it past the last quoted strike. The repair refits with the checks as constraints: each slice first, then all 160 parameters together. The result has **0 butterfly and 0 calendar violations**, and the fit costs little: RMS 0.52 vol points on all quotes (0.45 free), 0.25 on quotes worth 50 cents or more (`reference/svi_surface.py`, `reference/svi_surface_results.txt`).
+2. **Dupire.** Local vol comes from the surface by Gatheral's total-variance form, σ²_loc = ∂w/∂T / g(k), where g is Durrleman's butterfly function. It agrees with Dupire on prices (finite differences) to 3.7e-4 (`reference/local_vol.py`).
+3. **Where it is unreliable.** Dupire divides by g, a second derivative, and g goes to zero in the wings. Past the last quote the surface is extrapolation, so the local vol there is extrapolation divided by almost nothing. Every cell is flagged E (past the quotes), G (g < 0.1) or N (fit noise moves it by more than 10%), and the regions are shown in `docs/local_vol.png`. The regularization is deliberately light: raw Dupire, held in [2%, 300%]. A heavier fix that copied the nearest reliable vol into the flagged cells looked tidier but moved quoted options by up to 1.66 vol points, so it was rejected.
+
+![Local vol from the SPY surface, flagged regions marked](docs/local_vol.png)
+
+### Pricing with a blur whose width changes
+
+The state is x = ln(S / F_t). Each step back in time replaces every grid node by a Gaussian average of its neighbours. That node's width is σ(x, t)√h, and its mean is −½σ²h, which keeps the forward a martingale. The weights are normalised, run out to 8 standard deviations, and past the grid edge a value continues as A·eˣ + B. The final step before expiry is Black's formula at each node's local vol, so the strike's kink is never sampled (`reference/lv_blur.py`). Production grid: steps of at most 1 day and at least 32 per expiry interval, dx = 0.0008 on [−4, 2.5].
+
+| Check | Result | Source |
+| --- | --- | --- |
+| Constant local vol vs Black-Scholes | **$6.5e-11** (tolerance 1e-6) | `reference/check_lv_blur_results.txt` |
+| Round trip: 2,457 liquid SPY quotes (mid ≥ $0.50) priced under local vol, back to implied vol, vs the surface | max **0.073**, RMS 0.017 vol points (tolerance 0.1) | same, `docs/lv_roundtrip.png` |
+| QuantLib's local-vol finite-difference engine (`FdBlackScholesVanillaEngine`, localVol on), 39 contracts | max **0.039 vol points** ($0.022) | same |
+| Convergence in the time step (1 day vs half a day) | observed order 1.2 to 1.8; production is within 0.034 vol points of half the step | same |
+| Convergence in dx; a wider domain ([−5, 3.5]) | production within 1e-4 vol points of a finer dx; the wider domain moves vols by at most 8.6e-4 | same |
+
+QuantLib only agreed once its mesh was widened. With a 20% vol in the process, the engine sized its grid too narrow for local vols up to 300% and was off by 5%. Passing 100% fixed it.
+
+![Round-trip error map: every SPY quote's implied vol from the local-vol price minus the surface](docs/lv_roundtrip.png)
+
+### Model risk: same vanillas, different barriers
+
+Part 1's barrier options, scaled to SPY's $760.50, are priced under three models that all fit SPY's vanillas: Black-Scholes at the at-the-money vol, a fitted Merton (12.8% diffusion, a −41% jump about once every seven years) and local vol (`reference/model_risk.py`).
+
+| Option (98 days unless noted) | Black-Scholes | Merton | Local vol | Apart |
+| --- | ---: | ---: | ---: | ---: |
+| Up-and-out call, H 115%, K 100% | $17.42 | $21.16 | $25.11 | $7.69 |
+| Down-and-out put, H 90%, K 100% | $8.35 | $7.90 | $3.57 | $4.79 |
+| Down-and-out call, H 90%, K 80% | $144.69 | $155.89 | $139.38 | $16.51 |
+| Down-and-out call, H 90%, K 80%, 342 days | | | | **$31.24** |
+
+Merton and local vol price the plain vanillas with these strikes within 1.5 cents at 98 days, yet the barriers differ by 20% to 130%.
+
+The reason: a vanilla only cares where SPY ends up, and a barrier cares about the route it takes. The vanilla prices fix how likely each end price is on each expiry date, but not how SPY gets from one date to the next. Local vol puts the skew into the route. Vol rises as SPY falls, so a falling SPY tends to keep falling into a down barrier, and vol is low near the highs, so SPY rarely reaches an up barrier. Merton puts the skew into rare crashes and moves calmly in between. Ordinary dips rarely touch 90% under Merton, and ordinary rallies reach 115% more often. Both stories fit every option on the chain, but they disagree on the path, and a barrier pays for exactly that.
+
+Checks: Black-Scholes barriers match Reiner-Rubinstein within $2.6e-4. Merton vanillas match the series within $2.2e-8, and Merton barriers match Monte Carlo (400,000 paths) within about one standard error. Local-vol barriers match QuantLib's `FdBlackScholesBarrierEngine` with the same local vol within $0.022 (`reference/model_risk_results.txt`).
+
+![Model risk: the same options under the three models](docs/model_risk.png)
+
+### On the GPU
+
+`src/gpu-lv.js` runs one step per dispatch, all steps in one submit. Each thread owns a grid node and walks its own kernel, so neighbouring threads blur by different amounts. The local-vol table's rows are read at the grid nodes once and blended in time per step. Up to 16 strikes share each node's weights. The last step (Black's formula) is done in 64-bit on the CPU. `src/lv.js` is the same algorithm in 64-bit JavaScript, and `src/test-lv.mjs` holds it within 1e-9 of Python (worst 2.3e-10).
+
+Getting 32-bit floats within 1e-4 took four changes:
+- **Blur the change, not the value.** Each node's new value is its old value plus the weighted average of its neighbours' differences from it. With a flat vol every node has the same weights in every step, so the 32-bit rounding of the weights' sum is the same factor every time. Dividing whole prices by it shrank them 956 times over: the 1-year at-the-money put missed by 1.44e-4 on the Mac. A 32-bit emulation of the shader in JavaScript reproduced the miss (−2.9e-4 with an exact exp) and showed the cause. Dividing only the change brings it to 8e-6.
+- **An exp that fast math can't bend.** The weights use the shader's own exp (Cody-Waite reduction through `fma`, then a polynomial), good to 8e-8. The built-in exp is off by up to 1.9e-6 on SwiftShader, and Metal's fast-math exp is allowed up to 3 + |2x| ulp.
+- **Symmetric weights.** The weight exp(−(y − μ)²/2s²) is computed as exp(−y²/2s²)·exp(−y/2), which is the same up to a constant. Rounding in the first factor is then identical at +y and −y, so it can't shift the kernel's mean.
+- **Parity for in-the-money strikes.** An in-the-money strike is priced as its out-of-the-money twin plus put-call parity, so its intrinsic value never passes through the 32-bit steps.
+
+| Check (`/check.html?only=lv`, per $100 of forward) | Software GPU (SwiftShader) | Mac |
+| --- | --- | --- |
+| 12 flat-vol prices (28 and 342 days) vs Python and Black-Scholes | worst **8.1e-6** | worst **8.8e-6** (before the fix: 1.44e-4, 1 of 32 failed) |
+| 20 local-vol prices, 5 expiries from 3 to 342 days, strikes −2.5 to +1 sd | worst **7.5e-6** | worst **2.3e-6** (before the fix: 5.7e-5) |
+| Time on the GPU, 342 days (957 steps over 2,814 spots): 6 flat-vol strikes / 4 local-vol strikes | | 82 ms / 569 ms |
+
+The Mac run is in `reference/lv_gpu_mac.txt`. The local-vol job takes longer than the flat one because the wings, where local vol is held at up to 300%, need kernels up to 16 times wider.
+
+### In the demo
+
+**15 / LOCAL VOL** has four views:
+- **Heatmap:** SPY's local vol by strike and time, 1 to 900 days on a log scale. The red dashed lines mark the last quoted strikes of each expiry interval; past them the vol is extrapolation.
+- **The variable-width blur:** the local vol across strikes at the chosen expiry, and under it one day's blur at 13 spots. The bells are drawn 4x wide with equal areas, so you can see them narrow near the money and widen in the put wing.
+- **The round trip:** every quote of the chosen expiry, priced under local vol (Python, white) and live on the GPU (amber, up to 16 liquid strikes), minus the surface it came from. The ±0.1 vol-point lines are the requirement.
+- **Model risk:** every barrier option under the three models on a log dollar axis, with the gap for each, at 98 or 342 days.
+
+`src/test-demo-lv.mjs` drives the panel at 3, 7, 28 and 98 days. Each live round trip must be under 0.1 vol points and within 0.01 of Python. On SwiftShader the worst round trip was 0.071 vol points, and the GPU and Python differed by at most 0.0001.
+
+![Panel 15 of the demo](docs/demo_local_vol.png)
+
 ## What GitHub Actions checks
 
 Every push runs four jobs (`.github/workflows/checks.yml`); any failure turns the run red:
 
 | Job | What it checks |
 | --- | --- |
-| Python reference | `check.py`, the three barrier checks, and for fat tails: `check_kernels.py` (the table above), `check_smile.py` (no smile from a Gaussian, flattening with maturity, the negative-jump skew), `check_calibration.py` (the synthetic chain) and `check_spy_fit.py` (re-runs the SPY fit from the committed snapshot: it must reproduce `src/spy_fit.json`, beat flat Black-Scholes at least 4 times, stay within 1 vol point of every quote and fit a negative mean jump); for two stocks, `check_2d.py` (Margrabe, Stulz, the ρ = 0 product, QuantLib on 60 random markets, fourth-order convergence) and `intuition_2d.py` (the exchange value falls at every step of the correlation sweep; the spread referee and Kirk vs QuantLib) |
+| Python reference | `check.py`, the three barrier checks, and for fat tails: `check_kernels.py` (the table above), `check_smile.py` (no smile from a Gaussian, flattening with maturity, the negative-jump skew), `check_calibration.py` (the synthetic chain) and `check_spy_fit.py` (re-runs the SPY fit from the committed snapshot: it must reproduce `src/spy_fit.json`, beat flat Black-Scholes at least 4 times, stay within 1 vol point of every quote and fit a negative mean jump); for two stocks, `check_2d.py` (Margrabe, Stulz, the ρ = 0 product, QuantLib on 60 random markets, fourth-order convergence) and `intuition_2d.py` (the exchange value falls at every step of the correlation sweep; the spread referee and Kirk vs QuantLib); for local vol, `check_lv_ci.py` (the surface has no butterfly or calendar arbitrage, Gatheral's Dupire matches Dupire on prices, the blur at a flat vol matches Black-Scholes, the GPU's fixtures are reproduced exactly, and the 98-day up-and-out call under all three models matches the committed model-risk table) |
 | Full SPY chain | `check_chain_fit.py` reruns the whole pipeline from the saved snapshot (filters, parity forwards with early exercise, European vols, the Merton fit per expiry and the reference prices) and must reproduce the committed `stage1.json` and `src/chain_data.json` (the refit's Merton prices to within 1e-4 dollars, because least squares lands a little differently on other numpy and scipy builds; the committed prices must follow exactly from the committed fit); `chain_oos.py --check` must reproduce every out-of-sample number. About 4 minutes |
-| JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves) `test-chain.mjs` (the whole chain's jobs vs QuantLib and Merton's series) `test-odds.mjs` (the market's odds) and `test-2d.mjs` (the 2D blur vs Python to 1e-9, the 2D FFT vs direct, the wraparound sentinel), then a build of every page |
-| WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, the fat-tailed kernels and smile, the whole SPY chain in one submit, the market's odds and the two-stock fixtures (direct and 2D FFT, with the wraparound test), all in 32-bit floats within 1e-4 of Python; then `src/test-demo-2d.mjs` drives the demo's panel 14 through 11 states and needs every live error under 1e-4 |
+| JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves) `test-chain.mjs` (the whole chain's jobs vs QuantLib and Merton's series) `test-odds.mjs` (the market's odds) `test-2d.mjs` (the 2D blur vs Python to 1e-9, the 2D FFT vs direct, the wraparound sentinel) and `test-lv.mjs` (the variable-width blur vs Python to 1e-9, flat vol vs Black-Scholes), then a build of every page |
+| WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, the fat-tailed kernels and smile, the whole SPY chain in one submit, the market's odds, the two-stock fixtures (direct and 2D FFT, with the wraparound test) and the local-vol step, all in 32-bit floats within 1e-4 of Python; then `src/test-demo-2d.mjs` drives the demo's panel 14 through 11 states and needs every live error under 1e-4, and `src/test-demo-lv.mjs` drives panel 15 through four expiries and needs every live round trip under 0.1 vol points |
 
 ## Layout
 
@@ -446,6 +524,18 @@ src/gpu2d.js                       WGSL: the direct 2D blur and the 2D FFT
 src/check-2d.js, test-2d.mjs       the 2D fixtures on the GPU (/check.html?only=2d) and in 64-bit JS
 src/bench2d.js, bench2d.html       direct vs 2D FFT benchmark, crossover sweep
 src/twostock.js, test-demo-2d.mjs  the demo's panel 14, and its headless check
+reference/svi_surface.py           local vol, Stage 1: SVI per expiry, arbitrage checks and the constrained refit
+reference/local_vol.py             Stage 2: Dupire (Gatheral's total-variance form), flags, the clip
+reference/lv_blur.py               Stage 3: the variable-width blur, backward (gather) and forward (scatter)
+reference/check_lv_blur.py         Stage 3 checks: Black-Scholes, round trip, QuantLib, convergence
+reference/barrier_models.py        Stage 4: barriers under Black-Scholes, Merton and local vol on one blur
+reference/model_risk.py            Stage 4: the model-risk table and its checks
+reference/make_lv_data.py          writes src/lv_data.json (the web table, quotes, round trip) and src/lv_fixtures.json
+reference/check_lv_ci.py           CI: the local-vol checks that fit in a few minutes
+src/lv.js, test-lv.mjs             the local-vol step in 64-bit JS, and its check against Python
+src/gpu-lv.js, check-lv.js         WGSL: the variable-width step (/check.html?only=lv)
+src/lv-f32-emulation.mjs           that step emulated in 32-bit JS: why it averages changes, not values
+src/localvol.js, test-demo-lv.mjs  the demo's panel 15, and its headless check
 .github/workflows/checks.yml       CI: every Python check, every JS test, the build and the GPU check page, on every push
 ```
 

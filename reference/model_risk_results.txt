@@ -1,0 +1,103 @@
+Stage 4: Part 1's barrier options on SPY (spy_full_2026-10-23, spot $760.50) under three models. Python float64.
+Grid: dx = 0.0008 in ln(S/F) on [-2.5, 1.5]; time steps <= 1 day and at least 32 per expiry interval; continuous monitoring (Brownian-bridge weights).
+
+1. The three models
+   Black-Scholes, 2027-01-29 (98 days): at-the-money implied vol 15.27%
+   Black-Scholes, 2027-09-30 (342 days): at-the-money implied vol 16.72%
+   Merton, one fit to the surface at the 2172 liquid OTM quotes of all expiries to 2027-09-30 (each expiry weighted equally, 5 s):
+     diffusion vol 12.80%, 0.14 jumps a year, mean jump -40.79%, jump vol 29.16%
+     fit: RMS 1.82 vol points, max 11.93; by expiry (RMS / max):
+     3d 2.11/2.74  4d 0.90/1.80  5d 1.47/2.22  6d 2.10/3.13  7d 2.24/3.45  10d 1.42/2.23  11d 1.57/2.45  12d 1.97/3.06  13d 1.87/3.10  14d 2.20/3.42  21d 2.02/4.18  28d 1.98/4.80  35d 1.84/5.08  38d 2.02/5.61  42d 1.92/5.40  56d 1.68/3.54  69d 1.61/3.37  84d 1.47/2.26  98d 1.16/2.28  119d 1.17/2.38  126d 1.05/2.43  147d 1.78/5.83  159d 1.31/4.99  237d 2.52/11.43  250d 1.13/2.39  329d 2.55/11.93  342d 1.22/2.21
+   Local vol: Stage 2's Dupire surface as tabulated in Stage 3 (round trip within 0.073 vol points on every liquid quote).
+
+2. Checks
+   (a) Black-Scholes barriers against Reiner-Rubinstein (constant r = 4.2%, q = 1.3%, vol 15%; spot $760.50;
+       16 options x 2 expiries; dollars)
+       max |blur - closed form| $2.6e-04 (knock-outs; knock-ins are vanilla minus these)
+   (b) Merton vanillas against the Merton series (forward units x D F; the fitted model; 8 strikes x 2 expiries)
+       max |blur - series| $2.2e-08
+   (c) Merton knock-outs against Monte Carlo (400,000 paths, quarter-day steps, bridge crossing per step,
+       vanilla control variate), 98 days:
+       down-and-out call  K 80%  blur $ 155.8870   MC $ 155.8573 +- 0.0651 (2 se)  diff +0.9 se
+       down-and-out call  K 100%  blur $  28.4189   MC $  28.4194 +- 0.0032 (2 se)  diff -0.3 se
+       down-and-out put   K 100%  blur $   7.9026   MC $   7.9029 +- 0.0480 (2 se)  diff -0.0 se
+       up-and-out call    K 100%  blur $  21.1606   MC $  21.1698 +- 0.0701 (2 se)  diff -0.3 se
+       up-and-out put     K 100%  blur $  21.1583   MC $  21.1633 +- 0.0153 (2 se)  diff -0.6 se
+       up-and-out put     K 125%  blur $ 176.5191   MC $ 176.5436 +- 0.0607 (2 se)  diff -0.8 se
+   (heavy runs: 56 passes in 1124 s on 4 processes)
+   (d) Local-vol knock-outs against QuantLib FdBlackScholesBarrierEngine(localVol=True, Crank-Nicolson) on
+       the same table, forward units (spot 1, zero rates: the barrier is a fixed level), 98 days;
+       dollars = x D F of the expiry. QuantLib at 2000 x 2000; its change from 1000 x 1000 shown.
+       down-and-out call  H 0.90 K 0.80   QuantLib $ 133.1310   blur $ 133.1435   diff $+0.0125 (+0.01%)   half step $+0.0023   QL grid $-0.0058
+       down-and-out call  H 0.90 K 1.00   QuantLib $  23.0277   blur $  23.0386   diff $+0.0109 (+0.05%)   half step $+0.0064   QL grid $-0.0007
+       down-and-out put   H 0.90 K 1.00   QuantLib $   4.3227   blur $   4.3443   diff $+0.0216 (+0.50%)   half step $+0.0069   QL grid $-0.0080
+       up-and-out call    H 1.15 K 1.00   QuantLib $  21.5987   blur $  21.6134   diff $+0.0148 (+0.07%)   half step $+0.0081   QL grid $+0.0050
+       up-and-out put     H 1.15 K 1.00   QuantLib $  23.9560   blur $  23.9743   diff $+0.0183 (+0.08%)   half step $+0.0102   QL grid $-0.0012
+       up-and-out put     H 1.15 K 1.25   QuantLib $ 188.2256   blur $ 188.2234   diff $-0.0023 (-0.00%)   half step $-0.0013   QL grid $+0.0044
+
+3. Model risk: the same options, three models. Dollars per share; spread = max - min over the models, and
+   as a percentage of the local-vol price.
+   2027-01-29 (98 days), forward $767.76
+   vanillas (the market is the Stage 1 surface):
+     strike  type   market $     BS-ATM $   Merton $   local vol $
+       80%   call    160.954     157.609    161.630     160.945
+       80%   put       3.370       0.025      4.046       3.362
+      100%   call     28.426      27.614     28.435      28.441
+      100%   put      21.244      20.431     21.252      21.259
+      125%   call      0.039       0.071      0.103       0.040
+      125%   put     180.858     180.890    180.922     180.859
+     type                 barrier strike    BS-ATM $   Merton $  local vol $   spread $   spread %
+     down-and-out call      90%    80%     144.685    155.887    139.380     16.508     11.8%
+     down-and-out put       90%    80%      -0.000     -0.000     -0.000      0.000        --
+     down-and-out call      90%   100%      27.538     28.419     27.293      1.126      4.1%
+     down-and-out put       90%   100%       8.353      7.903      3.565      4.789    134.3%
+     down-and-in call       90%    80%      12.924      5.742     21.566     15.824     73.4%
+     down-and-in put        90%    80%       0.025      4.046      3.362      4.021    119.6%
+     down-and-in call       90%   100%       0.075      0.016      1.148      1.133     98.6%
+     down-and-in put        90%   100%      12.078     13.349     17.694      5.616     31.7%
+     up-and-out call       115%   100%      17.422     21.161     25.106      7.685     30.6%
+     up-and-out put        115%   100%      20.429     21.157     21.259      0.830      3.9%
+     up-and-out call       115%   125%       0.000      0.000      0.000      0.000        --
+     up-and-out put        115%   125%     174.441    176.517    178.717      4.276      2.4%
+     up-and-in call        115%   100%      10.192      7.274      3.335      6.857    205.6%
+     up-and-in put         115%   100%       0.003      0.095      0.000      0.095   20418.9%
+     up-and-in call        115%   125%       0.071      0.103      0.040      0.063    159.7%
+     up-and-in put         115%   125%       6.449      4.405      2.142      4.308    201.1%
+
+   2027-09-30 (342 days), forward $788.97
+   vanillas (the market is the Stage 1 surface):
+     strike  type   market $     BS-ATM $   Merton $   local vol $
+       80%   call    185.761     175.824    185.801     185.754
+       80%   put      12.400       2.463     12.441      12.394
+      100%   call     66.038      62.872     66.895      66.055
+      100%   put      38.705      35.539     39.563      38.722
+      125%   call      3.191       8.313      5.957       3.198
+      125%   put     158.394     163.516    161.159     158.401
+     type                 barrier strike    BS-ATM $   Merton $  local vol $   spread $   spread %
+     down-and-out call      90%    80%     131.838    163.079    132.976     31.241     23.5%
+     down-and-out put       90%    80%       0.000     -0.000      0.000      0.000        --
+     down-and-out call      90%   100%      56.274     64.559     54.027     10.531     19.5%
+     down-and-out put       90%   100%       1.971      2.391      1.088      1.304    119.8%
+     down-and-in call       90%    80%      43.986     22.722     52.779     30.056     56.9%
+     down-and-in put        90%    80%       2.463     12.441     12.394      9.978     80.5%
+     down-and-in call       90%   100%       6.598      2.337     12.028      9.691     80.6%
+     down-and-in put        90%   100%      33.568     37.171     37.634      4.066     10.8%
+     up-and-out call       115%   100%       6.105     10.333     10.671      4.566     42.8%
+     up-and-out put        115%   100%      33.884     35.556     38.075      4.191     11.0%
+     up-and-out call       115%   125%       0.000      0.000      0.000      0.000        --
+     up-and-out put        115%   125%     130.744    131.046    128.191      2.855      2.2%
+     up-and-in call        115%   100%      56.767     56.562     55.384      1.383      2.5%
+     up-and-in put         115%   100%       1.655      4.007      0.647      3.360    519.2%
+     up-and-in call        115%   125%       8.313      5.957      3.198      5.115    159.9%
+     up-and-in put         115%   125%      32.772     30.113     30.210      2.658      8.8%
+
+4. Convergence: largest change in any knock-out price (dollars) from the production setting when
+   the time step is doubled or halved, or the grid step doubled
+   2027-01-29 bs        step x2 $0.0000   step /2 $0.0000   dx x2 $0.0007   (22 s for the 3 production passes)
+   2027-01-29 merton    step x2 $0.0016   step /2 $0.0008   dx x2 $0.0020   (44 s for the 3 production passes)
+   2027-01-29 lv        step x2 $0.0276   step /2 $0.0142   dx x2 $0.0010   (273 s for the 3 production passes)
+   2027-09-30 bs        step x2 $0.0000   step /2 $0.0000   dx x2 $0.0003   (62 s for the 3 production passes)
+   2027-09-30 merton    step x2 $0.0194   step /2 $0.0097   dx x2 $0.0010   (88 s for the 3 production passes)
+   2027-09-30 lv        step x2 $0.0322   step /2 $0.0164   dx x2 $0.0006   (674 s for the 3 production passes)
+
+wrote data/spy_full_2026-10-23/model_risk.json

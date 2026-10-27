@@ -129,9 +129,36 @@ Commits are on branch `part3-2d` until it merges. Market for the panel and the s
 | T14 | Demo panel 14, 11 states: GPU at (100, 100) vs Margrabe / Stulz / exact spread | ≤ **7.9e-6**; GPU vs 64-bit blur ≤ 1.2e-5 | ⚠ cloud (SwiftShader) | `src/test-demo-2d.mjs` (CI) |
 | T15 | Demo panel 14's ellipse at ρ = +0.9 / −0.9 | +39° / −39° | any (geometry) | `docs/demo_two_stocks.png` |
 
+## Local volatility (Part 4, panel 15)
+
+Commits are on branch `part4-localvol` until it merges. The Oct 23 2026 SPY chain: 32 expiries, 3 to 819 days, 3,320 out-of-the-money quotes; "liquid" means a mid of $0.50 or more (2,457 quotes). Vol points are implied-vol percentage points.
+
+| # | What | Value | Machine | Source |
+| --- | --- | --- | --- | --- |
+| L1 | SVI surface, free fit: slices with butterfly arbitrage / neighbouring pairs with calendar arbitrage | 25 of 32 / 16 of 31, almost all past the last quote | ⚠ cloud (numpy) | `reference/svi_surface_results.txt` (9ed5e37) |
+| L2 | After the constrained refit | **0 / 0**; RMS 0.52 vol pts on all quotes (free fit 0.45), 0.25 on quotes worth 50c+ | ⚠ cloud (CI rechecks the arbitrage) | same |
+| L3 | Gatheral's total-variance Dupire vs Dupire on prices (finite differences), 1,874 reliable points | max relative difference 3.7e-4 | ⚠ cloud | `reference/local_vol_results.txt` (9ba2263) |
+| L4 | Regularization rejected: filling flagged cells with the nearest reliable vol | moved quoted options up to **1.66 vol pts**, so raw Dupire held in [2%, 300%] is used instead | ⚠ cloud | `reference/check_lv_blur_results.txt` (9ba2263) |
+| L5 | Variable-width blur at a constant vol vs Black-Scholes | **$6.5e-11** | ⚠ cloud (numpy, 64-bit) | same |
+| L6 | Round trip: 2,457 liquid quotes priced under local vol, back to implied vol, vs the surface | max **0.073**, RMS 0.017 vol pts | ⚠ cloud | same, `docs/lv_roundtrip.png` |
+| L7 | vs QuantLib 1.44's local-vol finite-difference engine, 39 contracts | max **0.039 vol pts** ($0.022) | ⚠ cloud | same |
+| L8 | Convergence in the time step | observed order 1.2 to 1.8; 1 day is within 0.034 vol pts of half a day | ⚠ cloud | same |
+| L9 | Model risk, 98-day up-and-out call (H 115%, K 100%): Black-Scholes / Merton / local vol | $17.42 / $21.16 / **$25.11** | ⚠ cloud (CI reproduces it) | `reference/model_risk_results.txt` (a849e5f) |
+| L10 | 98-day down-and-out put (H 90%, K 100%) | $8.35 / $7.90 / **$3.57** | ⚠ cloud | same |
+| L11 | Widest gap between the three models, down-and-out call H 90% K 80%: 98 / 342 days | **$16.51 / $31.24** | ⚠ cloud | same, `docs/model_risk.png` |
+| L12 | Merton and local vol on the plain vanillas behind L9–L10 | within 1.5 cents at 98 days | ⚠ cloud | same |
+| L13 | Barrier checks: vs Reiner-Rubinstein / Monte Carlo (400k paths) / QuantLib's local-vol barrier engine | $2.6e-4 / within about 1 se / $0.022 | ⚠ cloud | same |
+| L14 | The 64-bit JS step vs Python, 32 fixtures | worst 2.3e-10 | ⚠ cloud | `src/test-lv.mjs` (CI) |
+| L15 | The WGSL step vs Python, per $100 of forward: 12 flat-vol / 20 local-vol prices, 3 to 342 days | worst **8.8e-6 / 2.3e-6**, all 32 PASS (before dd39708: 1.44e-4, 31 of 32) | Mac, 2026-10-27 | `reference/lv_gpu_mac.txt` (dd39708); SwiftShader in CI: 8.1e-6 / 7.5e-6 |
+| L15b | The same check's GPU time at 342 days (957 steps, 2,814 spots): 6 flat-vol / 4 local-vol strikes | 82 ms / 569 ms | Mac, 2026-10-27 | same |
+| L16 | Demo panel 15, live GPU round trip at 3, 7, 28 and 98 days (16 liquid strikes each) | worst **0.071 vol pts**; GPU vs Python on the same grid ≤ 0.0001 | ⚠ cloud (SwiftShader) | `src/test-demo-lv.mjs` (CI) |
+| L17 | The same at 819 days (1,434 steps) | GPU vs Python 0.0048 vol pts | ⚠ cloud (SwiftShader) | `src/test-demo-lv.mjs` run by hand |
+| L18 | Reprice time for panel 15 on a real GPU | ⚠ **never measured** | | |
+
 ## Still to measure on the Mac
 
 1. QuantLib barriers on all cores, if you want a barrier ratio against all cores (Q3).
 2. Panel 14 on the Mac (T14): the live errors and the reprice time. Open the demo, scroll to 14 / TWO STOCKS and read the numbers off the panel.
+3. Panel 15 / LOCAL VOL on the Mac (L16, L18): at a few expiries, read the round trip, the GPU vs Python gap and the milliseconds off the panel. (`/check.html?only=lv` is done: L15, all PASS on 2026-10-27.)
 
 Done on 2026-10-24: `/check.html?only=fixtures` (A8, A9, B4) and `/check.html?only=odds` (O1–O8), both all PASS, the demo's top bar and error counter (A2, A10, C7, C10) from Alek's screen recording, and the 15-second clip from `/?record=1` (A7, `docs/blur-desk-15s.mp4`).

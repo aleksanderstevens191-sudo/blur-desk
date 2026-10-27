@@ -1,0 +1,45 @@
+Local-vol variable-width blur on Alek's Mac (apple metal-3, Chrome), 2026-10-27.
+Source: /check.html?only=lv on the part4-localvol preview (commit dd39708). Before that fix the
+same page gave 31 of 32 PASS: the 1-year flat at-the-money put missed by 1.44e-4 (commit 1059cc4).
+
+== /check.html?only=lv: all PASS ==
+GPU: apple metal-3
+tolerance: |gpu - py| < 0.0001
+
+local vol: the variable-width blur on the GPU vs Python (reference/make_lv_data.py):
+grid dx 0.0016 on [-3, 1.5], steps <= 1 day and >= 32 per expiry interval; per $100 of forward
+exp on [-34, 0.2] vs 64-bit: the GPU's built-in 1.81e-6, the shader's expf 7.25e-8 (relative; the weights use expf)
+PASS flat 2026-11-20 k -0.1000 call gpu=9.560858 py=9.560858 |gpu-py|=7.05e-8  |gpu - Black| 7.05e-8  (384 steps, 6 strikes, 89 ms)
+PASS flat 2026-11-20 k -0.1000 put  gpu=0.074299 py=0.074298 |gpu-py|=7.05e-8  |gpu - Black| 7.05e-8
+PASS flat 2026-11-20 k  0.0000 call gpu=2.204428 py=2.204428 |gpu-py|=1.82e-7  |gpu - Black| 1.82e-7
+PASS flat 2026-11-20 k  0.0000 put  gpu=2.204429 py=2.204428 |gpu-py|=5.61e-7  |gpu - Black| 5.61e-7
+PASS flat 2026-11-20 k  0.1000 call gpu=0.082112 py=0.082112 |gpu-py|=8.67e-9  |gpu - Black| 8.65e-9
+PASS flat 2026-11-20 k  0.1000 put  gpu=10.566382 py=10.566382 |gpu-py|=8.67e-9  |gpu - Black| 8.65e-9
+PASS flat 2027-09-30 k -0.1000 call gpu=12.536269 py=12.536271 |gpu-py|=2.46e-6  |gpu - Black| 2.46e-6  (957 steps, 6 strikes, 82 ms)
+PASS flat 2027-09-30 k -0.1000 put  gpu=3.399905 py=3.399908 |gpu-py|=2.46e-6  |gpu - Black| 2.46e-6
+PASS flat 2027-09-30 k  0.0000 call gpu=7.403942 py=7.403951 |gpu-py|=8.82e-6  |gpu - Black| 8.82e-6
+PASS flat 2027-09-30 k  0.0000 put  gpu=7.403946 py=7.403951 |gpu-py|=5.25e-6  |gpu - Black| 5.25e-6
+PASS flat 2027-09-30 k  0.1000 call gpu=3.757475 py=3.757479 |gpu-py|=4.02e-6  |gpu - Black| 4.02e-6
+PASS flat 2027-09-30 k  0.1000 put  gpu=13.854719 py=13.854723 |gpu-py|=4.02e-6  |gpu - Black| 4.02e-6
+PASS lv   2026-10-26 k -0.0253 put  gpu=0.023706 py=0.023706 |gpu-py|=1.70e-8  vol 15.891 (surface 15.862)  (32 steps, 4 strikes, 13 ms)
+PASS lv   2026-10-26 k -0.0101 put  gpu=0.115617 py=0.115617 |gpu-py|=4.00e-8  vol 12.437 (surface 12.444)
+PASS lv   2026-10-26 k  0.0000 call gpu=0.403467 py=0.403467 |gpu-py|=4.84e-9  vol 11.079 (surface 11.064)
+PASS lv   2026-10-26 k  0.0101 call gpu=0.070247 py=0.070247 |gpu-py|=4.95e-9  vol 10.398 (surface 10.372)
+PASS lv   2026-10-30 k -0.0537 put  gpu=0.085188 py=0.085188 |gpu-py|=5.87e-8  vol 24.774 (surface 24.779)  (160 steps, 4 strikes, 49 ms)
+PASS lv   2026-10-30 k -0.0215 put  gpu=0.290899 py=0.290898 |gpu-py|=1.89e-7  vol 18.619 (surface 18.617)
+PASS lv   2026-10-30 k  0.0000 call gpu=0.857332 py=0.857332 |gpu-py|=8.61e-8  vol 15.483 (surface 15.472)
+PASS lv   2026-10-30 k  0.0215 call gpu=0.123733 py=0.123733 |gpu-py|=5.19e-9  vol 13.677 (surface 13.662)
+PASS lv   2026-11-20 k -0.1042 put  gpu=0.275370 py=0.275370 |gpu-py|=2.02e-7  vol 27.277 (surface 27.288)  (384 steps, 4 strikes, 123 ms)
+PASS lv   2026-11-20 k -0.0417 put  gpu=0.667912 py=0.667911 |gpu-py|=3.65e-7  vol 19.506 (surface 19.500)
+PASS lv   2026-11-20 k  0.0000 call gpu=1.658232 py=1.658232 |gpu-py|=4.97e-7  vol 15.044 (surface 15.031)
+PASS lv   2026-11-20 k  0.0417 call gpu=0.192389 py=0.192389 |gpu-py|=4.54e-8  vol 12.419 (surface 12.409)
+PASS lv   2027-01-29 k -0.1979 put  gpu=0.533785 py=0.533785 |gpu-py|=3.10e-7  vol 28.251 (surface 28.263)  (608 steps, 4 strikes, 250 ms)
+PASS lv   2027-01-29 k -0.0791 put  gpu=1.285764 py=1.285764 |gpu-py|=7.75e-7  vol 20.166 (surface 20.163)
+PASS lv   2027-01-29 k  0.0000 call gpu=3.123339 py=3.123340 |gpu-py|=1.00e-6  vol 15.281 (surface 15.271)
+PASS lv   2027-01-29 k  0.0791 call gpu=0.331907 py=0.331907 |gpu-py|=1.43e-7  vol 12.242 (surface 12.233)
+PASS lv   2027-09-30 k -0.4046 put  gpu=0.907014 py=0.907013 |gpu-py|=5.77e-7  vol 30.570 (surface 30.582)  (957 steps, 4 strikes, 569 ms)
+PASS lv   2027-09-30 k -0.1619 put  gpu=2.449079 py=2.449079 |gpu-py|=5.72e-7  vol 22.102 (surface 22.102)
+PASS lv   2027-09-30 k  0.0000 call gpu=6.195209 py=6.195209 |gpu-py|=2.32e-7  vol 16.727 (surface 16.720)
+PASS lv   2027-09-30 k  0.1619 call gpu=0.653484 py=0.653482 |gpu-py|=2.34e-6  vol 13.225 (surface 13.217)
+
+all GPU results within 1e-4 of the Python reference

@@ -1,4 +1,4 @@
-# Every push: the Python reference checks (two stocks included), the full SPY chain rerun from its
+# Every push: the Python reference checks (two stocks and local vol included), the full SPY chain rerun from its
 # saved snapshot, the JS core against the Python fixtures and a build of the
 # demo pages, and the WebGPU shaders against the same fixtures in headless
 # Chromium on its software GPU (SwiftShader). A check that fails exits
@@ -40,6 +40,8 @@ jobs:
         run: python reference/check_2d.py
       - name: Two stocks, exchange value vs correlation, spread vs Kirk
         run: python reference/intuition_2d.py
+      - name: Local vol, surface arbitrage, Dupire, the blur vs Black-Scholes, GPU fixtures, model risk
+        run: python reference/check_lv_ci.py
 
   chain:
     name: Full SPY chain, rerun from the saved snapshot
@@ -77,6 +79,8 @@ jobs:
         run: node src/test-odds.mjs
       - name: Two stocks, the 2D blur in 64-bit JS vs Python, 2D FFT, wraparound test
         run: node src/test-2d.mjs
+      - name: Local vol, the variable-width blur in 64-bit JS vs Python, flat vol vs Black-Scholes
+        run: node src/test-lv.mjs
       - run: npm ci
       - name: Build the demo, check and bench pages
         run: npm run build
@@ -108,3 +112,7 @@ jobs:
         run: node src/test-gpu.mjs 2d
       - name: Two stocks, the demo's panel 14 driven like a user, live errors under 1e-4
         run: node src/test-demo-2d.mjs
+      - name: Local vol, the variable-width blur on the GPU vs Python
+        run: node src/test-gpu.mjs lv
+      - name: Local vol, the demo's panel 15 driven like a user, live round trip under 0.1 vol pts
+        run: node src/test-demo-lv.mjs

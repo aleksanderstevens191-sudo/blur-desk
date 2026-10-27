@@ -1,0 +1,230 @@
+SPY chain spy_full_2026-10-23: quotes at 2026-10-23T14:57:29-04:00, spot 760.57, 32 expiries, 3320 out-of-the-money quotes with a European-equivalent vol
+  weights: 1 / vol half-spread, floor 0.25 vol points. Median half-spread 0.05 vol points
+  checks on k = ln K/F from -3.0 to 1.5 (step 0.001); edge-detect on $0.05 strikes
+
+(1) Raw SVI per expiry, no constraints (67 s)
+  expiry       days    n         a        b     rho        m        s    rms   wrms    max in b/a   >50c
+  2026-10-26   3.04   75 -0.000248  0.01312  -0.788  -0.0353  0.04152   0.54   0.33   2.37    36%   0.29
+  2026-10-27   4.04   82 -0.000352  0.01621  -0.841  -0.0445  0.05410   0.44   0.30   1.85    28%   0.23
+  2026-10-28   5.04   95 -0.000825  0.02228  -0.798  -0.0559  0.07643   0.68   0.45   2.97    18%   0.29
+  2026-10-29   6.04  101 -0.001778  0.02876  -0.742  -0.0665  0.10559   0.71   0.46   3.78    20%   0.31
+  2026-10-30   7.04  211 -0.010210  0.05163  -0.299  -0.0348  0.21423   0.98   0.57   4.34    18%   0.51
+  2026-11-02  10.04  112 -0.082962  0.16532  +0.313  +0.2118  0.53071   0.55   0.40   2.15    11%   0.33
+  2026-11-03  11.04  102 -0.376831  0.64500  +0.710  +0.8787  0.83078   0.40   0.32   2.06    14%   0.27
+  2026-11-04  12.04  104 -0.011421  0.05649  -0.366  -0.0356  0.22581   0.28   0.27   1.13    21%   0.22
+  2026-11-05  13.04   24 -0.022423  3.25568  +0.985  +0.2773  0.04085   0.14   0.13   0.31    29%   0.12
+  2026-11-06  14.04  146 -0.070456  0.24725  +0.598  +0.3112  0.35832   0.36   0.31   1.51    18%   0.29
+  2026-11-13  21.04  145 -0.067103  0.24743  +0.578  +0.2912  0.33639   0.18   0.17   0.72    23%   0.16
+  2026-11-20  28.04  195 -0.027222  0.11002  +0.144  +0.0962  0.26003   0.43   0.17   3.44    27%   0.13
+  2026-11-27  35.04  129 -0.028777  0.11140  +0.096  +0.0904  0.27106   0.22   0.16   1.67    26%   0.13
+  2026-11-30  38.04  203 -0.030370  0.11507  +0.108  +0.0963  0.27725   0.19   0.14   1.39    29%   0.12
+  2026-12-04  42.04  130 -0.034659  0.12586  +0.135  +0.1100  0.29035   0.14   0.14   0.60    26%   0.12
+  2026-12-18  56.04  217 -0.031130  0.11460  -0.055  +0.0694  0.29084   0.59   0.23   5.19    16%   0.18
+  2026-12-31  69.04  190 -0.028621  0.11481  -0.074  +0.0704  0.27276   0.17   0.17   0.64    15%   0.16
+  2027-01-15  84.04  112 -0.069217  0.17713  +0.102  +0.1450  0.41108   0.67   0.18   4.67    27%   0.15
+  2027-01-29  98.04   84 -0.085825  0.24389  +0.340  +0.2457  0.39030   0.10   0.10   0.21    19%   0.10
+  2027-02-19 119.04   68 -0.310905  4.08892  +0.948  +0.8335  0.24158   0.12   0.12   0.25    18%   0.12
+  2027-02-26 126.04   61 -0.021567  0.11464  -0.183  +0.0731  0.23506   0.08   0.08   0.19    28%   0.08
+  2027-03-19 147.04   96 -0.102716  0.21694  +0.061  +0.1722  0.50126   0.30   0.18   2.46    24%   0.16
+  2027-03-31 159.04   67 -0.350546 10.00000  +0.977  +0.8890  0.16638   0.13   0.13   0.28    13%   0.13
+  2027-06-17 237.04   95 -0.094000  0.20363  -0.156  +0.1104  0.51689   0.27   0.23   1.52    12%   0.21
+  2027-06-30 250.04   52 -0.007860  0.10484  -0.508  +0.0627  0.20557   0.09   0.09   0.30    23%   0.09
+  2027-09-17 329.04   86 -0.124865  0.24362  -0.071  +0.1834  0.57428   0.24   0.20   1.46     8%   0.19
+  2027-09-30 342.04   32  0.000376  0.10565  -0.574  +0.0803  0.17956   0.05   0.05   0.12    38%   0.05
+  2027-12-17 420.04  103 -0.134881  0.25739  -0.085  +0.1986  0.60398   0.26   0.22   1.37    10%   0.21
+  2028-01-21 455.04   73 -0.153701  0.27482  -0.047  +0.2287  0.64009   0.25   0.21   1.21    12%   0.20
+  2028-06-16 602.04   39 -0.160543  0.28778  -0.097  +0.2295  0.66735   0.21   0.21   0.35    15%   0.21
+  2028-12-15 784.04   56 -0.397081  0.51969  +0.283  +0.5784  0.88024   0.27   0.20   1.20    14%   0.19
+  2029-01-19 819.04   35 -0.478341  0.63643  +0.395  +0.7045  0.89370   0.68   0.21   3.50    97%   0.35
+  rms / max: vol points against the mid, every quote. wrms: weighted by 1 / half-spread (what the fit
+  minimises). in b/a: share of quotes whose fitted vol is inside the bid-ask vols. >50c: rms over quotes
+  worth 50 cents or more.
+
+(2) Arbitrage in the unconstrained fit
+  Butterfly, slice by slice: Durrleman g (min, where, grid points below 0, how many of them inside
+  the quoted strikes, their k range); the edge-detect density [1,-2,1]/dK^2 on Black prices (min per
+  dollar, strikes below -roundoff, their strike range; total mass); Lee's wing slope max b(1 +- rho) <= 2
+  2026-10-26  g min -2.69e-03 at k -0.081  g<0    15 ( 15 quoted) k -0.089..-0.075   edge min -2.09e-06 <0   216/67421 K $695.60..$706.35     mass 1.000000  Lee 0.023   VIOLATION
+  2026-10-27  g min +1.21e-02 at k -0.105  g<0     0 (  0 quoted)                    edge min +2.29e-138 <0     0/67430                        mass 1.000000  Lee 0.030
+  2026-10-28  g min +1.55e-02 at k -0.140  g<0     0 (  0 quoted)                    edge min +5.05e-83 <0     0/67440                        mass 1.000000  Lee 0.040
+  2026-10-29  g min +1.83e-02 at k -0.177  g<0     0 (  0 quoted)                    edge min +6.66e-54 <0     0/67448                        mass 1.000000  Lee 0.050
+  2026-10-30  g min +1.03e-03 at k +0.205  g<0     0 (  0 quoted)                    edge min +1.11e-15 <0     0/67472                        mass 1.000000  Lee 0.067
+  2026-11-02  g min -4.38e-02 at k +0.689  g<0   808 (  0 quoted) k +0.367..+1.174   edge min -8.25e-07 <0 27343/67482 K $1097.85..$2464.95   mass 0.999955  Lee 0.217   VIOLATION
+  2026-11-03  g min -1.45e-01 at k +1.500  g<0   340 (  0 quoted) k +1.161..+1.500   edge min -1.39e-06 <0 19665/67491 K $2429.30..$3412.50   mass 1.004592  Lee 1.103   VIOLATION
+  2026-11-04  g min -5.36e-03 at k +0.242  g<0   113 (  0 quoted) k +0.192..+0.304   edge min -2.75e-09 <0  2189/67501 K $922.80..$1032.20    mass 1.000000  Lee 0.077   VIOLATION
+  2026-11-05  g min -1.52e+01 at k +0.354  g<0  1197 (  0 quoted) k +0.304..+1.500   edge min -5.89e-03 <0 47632/67509 K $1031.85..$3413.40   mass 1.043880  Lee 6.463   VIOLATION
+  2026-11-06  g min -1.31e-01 at k +0.738  g<0  1052 (  0 quoted) k +0.449..+1.500   edge min -9.50e-06 <0 44439/67529 K $1192.50..$3414.40   mass 0.999560  Lee 0.395   VIOLATION
+  2026-11-13  g min -1.39e-01 at k +0.697  g<0  1019 (  0 quoted) k +0.426..+1.444   edge min -1.19e-05 <0 41328/67580 K $1166.65..$3233.00   mass 0.999490  Lee 0.390   VIOLATION
+  2026-11-20  g min -5.14e-02 at k +0.379  g<0   416 (  0 quoted) k +0.230..+0.645   edge min -3.21e-06 <0  9901/67634 K $959.60..$1454.60    mass 0.999991  Lee 0.126   VIOLATION
+  2026-11-27  g min -4.64e-02 at k +0.388  g<0   410 (  0 quoted) k +0.239..+0.648   edge min -2.28e-06 <0  9840/67688 K $968.90..$1460.85    mass 0.999994  Lee 0.122   VIOLATION
+  2026-11-30  g min -4.79e-02 at k +0.401  g<0   428 (  0 quoted) k +0.246..+0.673   edge min -2.33e-06 <0 10426/67699 K $976.85..$1498.10    mass 0.999992  Lee 0.128   VIOLATION
+  2026-12-04  g min -5.23e-02 at k +0.432  g<0   470 (  0 quoted) k +0.265..+0.734   edge min -2.66e-06 <0 11962/67746 K $995.30..$1593.35    mass 0.999984  Lee 0.143   VIOLATION
+  2026-12-18  g min -3.03e-02 at k +0.413  g<0   356 (  0 quoted) k +0.277..+0.632   edge min -7.00e-07 <0  8609/67680 K $1006.65..$1437.05   mass 0.999998  Lee 0.121   VIOLATION
+  2026-12-31  g min -2.69e-02 at k +0.408  g<0   317 (  0 quoted) k +0.287..+0.603   edge min -7.02e-07 <0  7586/67775 K $1018.45..$1397.70   mass 0.999998  Lee 0.123   VIOLATION
+  2027-01-15  g min -5.05e-02 at k +0.606  g<0   655 (  0 quoted) k +0.372..+1.026   edge min -1.33e-06 <0 20572/67933 K $1111.15..$2139.70   mass 0.999949  Lee 0.195   VIOLATION
+  2027-01-29  g min -9.96e-02 at k +0.709  g<0   936 (  0 quoted) k +0.433..+1.368   edge min -5.64e-06 <0 36665/68051 K $1182.85..$3016.10   mass 0.999700  Lee 0.327   VIOLATION
+  2027-02-19  g min -6.45e+00 at k +1.319  g<0   570 (  0 quoted) k +0.931..+1.500   edge min -2.08e-04 <0 29971/68239 K $1951.80..$3450.30   mass 1.098584  Lee 7.964   VIOLATION
+  2027-02-26  g min +7.60e-03 at k +0.438  g<0     0 (  0 quoted)                    edge min +1.17e-09 <0     0/68300                        mass 0.999997  Lee 0.136
+  2027-03-19  g min -4.77e-02 at k +0.753  g<0   785 (  0 quoted) k +0.472..+1.256   edge min -7.05e-07 <0 29459/68376 K $1235.90..$2708.80   mass 0.999891  Lee 0.230   VIOLATION
+  2027-03-31  g min -3.20e+01 at k +1.267  g<0   562 (  0 quoted) k +0.939..+1.500   edge min -7.47e-04 <0 29753/68454 K $1973.60..$3461.20   mass 1.092775  Lee 19.767   VIOLATION
+  2027-06-17  g min -1.66e-02 at k +0.785  g<0   476 ( 11 quoted) k +0.595..+1.070   edge min -6.17e-08 <0 17237/69158 K $1413.40..$2275.20   mass 0.999780  Lee 0.235   VIOLATION
+  2027-06-30  g min +1.67e-01 at k +0.826  g<0     0 (  0 quoted)                    edge min +2.40e-12 <0     0/69169                        mass 0.999983  Lee 0.158
+  2027-09-17  g min -2.64e-02 at k +0.924  g<0   681 (  0 quoted) k +0.665..+1.345   edge min -1.26e-07 <0 29866/69870 K $1532.80..$3026.05   mass 0.999532  Lee 0.261   VIOLATION
+  2027-09-30  g min +2.37e-01 at k +1.500  g<0     0 (  0 quoted)                    edge min +1.69e-12 <0     0/69931                        mass 0.999966  Lee 0.166
+  2027-12-17  g min -1.77e-02 at k +1.006  g<0   586 (  0 quoted) k +0.775..+1.360   edge min -6.38e-08 <0 27512/70620 K $1728.90..$3104.45   mass 0.999248  Lee 0.279   VIOLATION
+  2028-01-21  g min -2.32e-02 at k +1.067  g<0   708 (  0 quoted) k +0.793..+1.500   edge min -8.83e-08 <0 36361/70914 K $1767.55..$3585.55   mass 0.999125  Lee 0.288   VIOLATION
+  2028-06-16  g min -6.98e-03 at k +1.168  g<0   405 (  0 quoted) k +0.994..+1.398   edge min -1.53e-08 <0 21998/72197 K $2199.80..$3299.65   mass 0.998397  Lee 0.316   VIOLATION
+  2028-12-15  g min -9.00e-02 at k +1.500  g<0   460 (  0 quoted) k +1.041..+1.500   edge min -4.77e-07 <0 27478/73817 K $2358.50..$3732.35   mass 0.997934  Lee 0.667   VIOLATION
+  2029-01-19  g min -1.13e-01 at k +1.500  g<0   371 (  0 quoted) k +1.130..+1.500   edge min -7.65e-07 <0 23171/74066 K $2586.45..$3744.95   mass 0.999000  Lee 0.888   VIOLATION
+  Calendar, each pair of neighbouring expiries: min of w_{i+1} - w_i on the grid, grid points below 0
+  (how many inside both expiries' quoted strikes) and their k range, and whether the wing slopes
+  keep the order beyond the grid
+  2026-10-26 -> 2026-10-27  min dw -3.883e-04  <0  1440 (   0 quoted) k +0.061..+1.500   wings CROSS   VIOLATION
+  2026-10-27 -> 2026-10-28  min dw +7.679e-05  <0     0 (   0 quoted)                    wings ok
+  2026-10-28 -> 2026-10-29  min dw +5.188e-05  <0     0 (   0 quoted)                    wings ok
+  2026-10-29 -> 2026-10-30  min dw +5.989e-05  <0     0 (   0 quoted)                    wings ok
+  2026-10-30 -> 2026-11-02  min dw +2.280e-05  <0     0 (   0 quoted)                    wings ok
+  2026-11-02 -> 2026-11-03  min dw -2.492e-05  <0   100 (   3 quoted) k +0.084..+0.183   wings ok   VIOLATION
+  2026-11-03 -> 2026-11-04  min dw -5.323e-01  <0  4102 (   5 quoted) k -3.000..+1.500   wings CROSS   VIOLATION
+  2026-11-04 -> 2026-11-05  min dw -7.963e-02  <0  2905 (   0 quoted) k -3.000..-0.096   wings CROSS   VIOLATION
+  2026-11-05 -> 2026-11-06  min dw -7.469e+00  <0  1420 (   5 quoted) k +0.081..+1.500   wings CROSS   VIOLATION
+  2026-11-06 -> 2026-11-13  min dw +8.067e-05  <0     0 (   0 quoted)                    wings CROSS   VIOLATION
+  2026-11-13 -> 2026-11-20  min dw -2.641e-01  <0  3190 (   0 quoted) k -3.000..+1.500   wings CROSS   VIOLATION
+  2026-11-20 -> 2026-11-27  min dw -5.864e-03  <0  1370 (  23 quoted) k +0.131..+1.500   wings CROSS   VIOLATION
+  2026-11-27 -> 2026-11-30  min dw +9.491e-06  <0     0 (   0 quoted)                    wings ok
+  2026-11-30 -> 2026-12-04  min dw +1.136e-04  <0     0 (   0 quoted)                    wings ok
+  2026-12-04 -> 2026-12-18  min dw -4.052e-02  <0  1346 (   9 quoted) k +0.155..+1.500   wings CROSS   VIOLATION
+  2026-12-18 -> 2026-12-31  min dw -8.000e-04  <0   509 (   0 quoted) k +0.992..+1.500   wings CROSS   VIOLATION
+  2026-12-31 -> 2027-01-15  min dw +2.780e-04  <0     0 (   0 quoted)                    wings ok
+  2027-01-15 -> 2027-01-29  min dw +4.618e-04  <0     0 (   0 quoted)                    wings ok
+  2027-01-29 -> 2027-02-19  min dw +4.238e-04  <0     0 (   0 quoted)                    wings ok
+  2027-02-19 -> 2027-02-26  min dw -5.056e+00  <0  3919 (   0 quoted) k -3.000..+1.500   wings CROSS   VIOLATION
+  2027-02-26 -> 2027-03-19  min dw -1.038e-04  <0    68 (   0 quoted) k +0.224..+0.291   wings ok   VIOLATION
+  2027-03-19 -> 2027-03-31  min dw +4.310e-04  <0     0 (   0 quoted)                    wings ok
+  2027-03-31 -> 2027-06-17  min dw -1.179e+01  <0  1261 (   0 quoted) k +0.240..+1.500   wings CROSS   VIOLATION
+  2027-06-17 -> 2027-06-30  min dw -1.701e-01  <0  3789 (  18 quoted) k -3.000..+1.500   wings CROSS   VIOLATION
+  2027-06-30 -> 2027-09-17  min dw +3.414e-03  <0     0 (   0 quoted)                    wings ok
+  2027-09-17 -> 2027-09-30  min dw -2.048e-01  <0  3771 (   2 quoted) k -3.000..+1.500   wings CROSS   VIOLATION
+  2027-09-30 -> 2027-12-17  min dw +3.494e-03  <0     0 (   0 quoted)                    wings ok
+  2027-12-17 -> 2028-01-21  min dw +1.566e-03  <0     0 (   0 quoted)                    wings ok
+  2028-01-21 -> 2028-06-16  min dw -4.070e-03  <0   555 (   0 quoted) k +0.946..+1.500   wings CROSS   VIOLATION
+  2028-06-16 -> 2028-12-15  min dw +1.050e-02  <0     0 (   0 quoted)                    wings ok
+  2028-12-15 -> 2029-01-19  min dw +2.463e-03  <0     0 (   0 quoted)                    wings ok
+  Between expiries (w linear in T at fixed k, 19 times per interval): 267788 grid points with g < 0; min g -2.94e+01 at T = 158.44 days, k = +1.264
+  => 25 of 32 slices with butterfly arbitrage, 16 of 31 neighbouring pairs with calendar arbitrage
+
+(3) Repair: refit with the checks as constraints (penalties with small margins, then a strict check)
+  pass 1 (54 s): short to long, each slice arbitrage-free and on or above the one before
+  pass 2 (156 s): all 160 parameters at once from pass 1, every constraint between every pair, penalty up to 1e+04
+  weighted misfit (sum of squared weighted residuals): unconstrained 3463.0, pass 1 4861.6, pass 2 4789.9
+  expiry       days         a        b     rho        m        s    rms   wrms    max in b/a   >50c  change vs (1):    rms in b/a  max |dvol| on quotes
+  2026-10-26   3.04 -0.000264  0.01314  -0.777  -0.0350  0.04252   0.55   0.34   2.57    35%   0.29                 +0.00    -1%                  0.20
+  2026-10-27   4.04 -0.000499  0.01723  -0.795  -0.0450  0.05994   0.46   0.30   1.99    26%   0.24                 +0.02    -2%                  0.41
+  2026-10-28   5.04 -0.000825  0.02228  -0.798  -0.0559  0.07644   0.68   0.45   2.97    18%   0.29                 +0.00    +0%                  0.00
+  2026-10-29   6.04 -0.001778  0.02876  -0.742  -0.0665  0.10559   0.71   0.46   3.78    20%   0.31                 -0.00    +0%                  0.00
+  2026-10-30   7.04 -0.009797  0.05077  -0.326  -0.0398  0.21130   1.04   0.57   4.55    19%   0.49                 +0.05    +1%                  0.26
+  2026-11-02  10.04 -0.009939  0.05223  -0.318  -0.0315  0.20874   0.61   0.45   3.19    18%   0.32                 +0.07    +7%                  1.04
+  2026-11-03  11.04 -0.010232  0.05400  -0.330  -0.0313  0.20928   0.50   0.39   2.84    20%   0.31                 +0.10    +6%                  0.78
+  2026-11-04  12.04 -0.010011  0.05445  -0.327  -0.0247  0.20418   0.33   0.33   0.63    18%   0.30                 +0.06    -3%                  0.79
+  2026-11-05  13.04 -0.009926  0.05540  -0.304  -0.0173  0.19838   0.50   0.41   1.68    12%   0.32                 +0.36   -17%                  1.99
+  2026-11-06  14.04 -0.009826  0.05627  -0.284  -0.0099  0.19338   0.47   0.41   2.24    23%   0.33                 +0.11    +5%                  2.19
+  2026-11-13  21.04 -0.010096  0.06156  -0.256  +0.0053  0.18393   0.37   0.33   1.73    14%   0.28                 +0.19   -10%                  1.88
+  2026-11-20  28.04 -0.011504  0.06948  -0.225  +0.0145  0.18674   0.75   0.28   5.36    22%   0.26                 +0.31    -6%                  1.92
+  2026-11-27  35.04 -0.012121  0.07250  -0.221  +0.0200  0.19013   0.25   0.24   0.61    12%   0.22                 +0.03   -13%                  2.13
+  2026-11-30  38.04 -0.012583  0.07399  -0.217  +0.0216  0.19357   0.22   0.22   0.65    12%   0.20                 +0.03   -17%                  1.61
+  2026-12-04  42.04 -0.013115  0.07745  -0.205  +0.0276  0.19422   0.20   0.20   0.64    12%   0.19                 +0.06   -15%                  0.84
+  2026-12-18  56.04 -0.019504  0.09367  -0.225  +0.0275  0.23820   0.71   0.28   6.34    14%   0.26                 +0.12    -2%                  1.18
+  2026-12-31  69.04 -0.019225  0.09669  -0.208  +0.0404  0.23131   0.18   0.18   0.59    19%   0.19                 +0.01    +5%                  0.41
+  2027-01-15  84.04 -0.031646  0.11834  -0.232  +0.0279  0.30440   0.91   0.29   6.48    16%   0.26                 +0.24   -11%                  1.93
+  2027-01-29  98.04 -0.030029  0.11846  -0.231  +0.0420  0.29368   0.17   0.17   0.30    14%   0.17                 +0.07    -5%                  0.40
+  2027-02-19 119.04 -0.034199  0.12876  -0.226  +0.0506  0.30974   0.20   0.20   0.61    15%   0.20                 +0.08    -3%                  0.53
+  2027-02-26 126.04 -0.033949  0.12912  -0.223  +0.0573  0.30864   0.15   0.15   0.26    11%   0.15                 +0.07   -16%                  0.42
+  2027-03-19 147.04 -0.050242  0.15160  -0.242  +0.0463  0.38262   0.24   0.24   0.49    10%   0.23                 -0.05   -14%                  2.20
+  2027-03-31 159.04 -0.049653  0.15198  -0.239  +0.0553  0.37990   0.21   0.21   0.35    18%   0.21                 +0.08    +4%                  0.29
+  2027-06-17 237.04 -0.074012  0.18530  -0.234  +0.0777  0.46684   0.24   0.24   0.75    16%   0.23                 -0.03    +4%                  0.77
+  2027-06-30 250.04 -0.072040  0.18531  -0.234  +0.0868  0.45827   0.20   0.20   0.44    12%   0.20                 +0.11   -12%                  0.74
+  2027-09-17 329.04 -0.089142  0.21032  -0.194  +0.1232  0.50408   0.22   0.21   0.69    10%   0.20                 -0.03    +2%                  0.78
+  2027-09-30 342.04 -0.089390  0.21108  -0.190  +0.1314  0.50591   0.18   0.18   0.30     3%   0.18                 +0.13   -34%                  0.39
+  2027-12-17 420.04 -0.110261  0.23599  -0.159  +0.1588  0.55972   0.24   0.22   0.99    10%   0.22                 -0.02    +0%                  0.38
+  2028-01-21 455.04 -0.119210  0.24461  -0.147  +0.1717  0.58439   0.23   0.21   0.74    14%   0.21                 -0.02    +1%                  0.47
+  2028-06-16 602.04 -0.147984  0.27877  -0.122  +0.2141  0.64562   0.21   0.21   0.39    13%   0.21                 +0.00    -3%                  0.04
+  2028-12-15 784.04 -0.176832  0.31832  -0.074  +0.2615  0.69070   0.23   0.23   0.48    23%   0.23                 -0.04    +9%                  0.92
+  2029-01-19 819.04 -0.178322  0.32742  -0.059  +0.2716  0.68500   0.55   0.22   2.55    91%   0.35                 -0.14    -6%                  0.95
+  all 3320 quotes: rms 0.52 vol points (unconstrained 0.45); inside the bid-ask 17% (unconstrained 21%); quotes worth 50c+ (2454): rms 0.25 (unconstrained 0.20)
+
+(4) Arbitrage in the repaired surface
+  Butterfly, slice by slice: Durrleman g (min, where, grid points below 0, how many of them inside
+  the quoted strikes, their k range); the edge-detect density [1,-2,1]/dK^2 on Black prices (min per
+  dollar, strikes below -roundoff, their strike range; total mass); Lee's wing slope max b(1 +- rho) <= 2
+  2026-10-26  g min +9.70e-05 at k -0.082  g<0     0 (  0 quoted)                    edge min +1.29e-119 <0     0/67421                        mass 1.000000  Lee 0.023
+  2026-10-27  g min +1.30e-02 at k -0.110  g<0     0 (  0 quoted)                    edge min +1.18e-102 <0     0/67430                        mass 1.000000  Lee 0.031
+  2026-10-28  g min +1.55e-02 at k -0.140  g<0     0 (  0 quoted)                    edge min +5.16e-83 <0     0/67440                        mass 1.000000  Lee 0.040
+  2026-10-29  g min +1.83e-02 at k -0.177  g<0     0 (  0 quoted)                    edge min +6.71e-54 <0     0/67448                        mass 1.000000  Lee 0.050
+  2026-10-30  g min +3.31e-03 at k +0.204  g<0     0 (  0 quoted)                    edge min +2.87e-16 <0     0/67472                        mass 1.000000  Lee 0.067
+  2026-11-02  g min +7.97e-05 at k +0.213  g<0     0 (  0 quoted)                    edge min +7.23e-16 <0     0/67482                        mass 1.000000  Lee 0.069
+  2026-11-03  g min +8.18e-05 at k +0.220  g<0     0 (  0 quoted)                    edge min +1.00e-15 <0     0/67491                        mass 1.000000  Lee 0.072
+  2026-11-04  g min +7.71e-05 at k +0.227  g<0     0 (  0 quoted)                    edge min +1.41e-15 <0     0/67501                        mass 1.000000  Lee 0.072
+  2026-11-05  g min +9.46e-05 at k +0.227  g<0     0 (  0 quoted)                    edge min +5.11e-15 <0     0/67509                        mass 1.000000  Lee 0.072
+  2026-11-06  g min +9.01e-05 at k +0.231  g<0     0 (  0 quoted)                    edge min +1.44e-14 <0     0/67529                        mass 1.000000  Lee 0.072
+  2026-11-13  g min +9.02e-05 at k +0.245  g<0     0 (  0 quoted)                    edge min +2.06e-13 <0     0/67580                        mass 1.000000  Lee 0.077
+  2026-11-20  g min +8.93e-05 at k +0.263  g<0     0 (  0 quoted)                    edge min +3.14e-12 <0     0/67634                        mass 1.000000  Lee 0.085
+  2026-11-27  g min +9.45e-05 at k +0.277  g<0     0 (  0 quoted)                    edge min +5.92e-12 <0     0/67688                        mass 1.000000  Lee 0.089
+  2026-11-30  g min +9.30e-05 at k +0.284  g<0     0 (  0 quoted)                    edge min +8.18e-12 <0     0/67699                        mass 1.000000  Lee 0.090
+  2026-12-04  g min +9.56e-05 at k +0.294  g<0     0 (  0 quoted)                    edge min +1.90e-11 <0     0/67746                        mass 1.000000  Lee 0.093
+  2026-12-18  g min +4.72e-05 at k +0.355  g<0     0 (  0 quoted)                    edge min +8.92e-11 <0     0/67680                        mass 1.000000  Lee 0.115
+  2026-12-31  g min +7.81e-05 at k +0.367  g<0     0 (  0 quoted)                    edge min +1.72e-10 <0     0/67775                        mass 1.000000  Lee 0.117
+  2027-01-15  g min +6.87e-05 at k +0.443  g<0     0 (  0 quoted)                    edge min +4.88e-10 <0     0/67933                        mass 0.999996  Lee 0.146
+  2027-01-29  g min +7.23e-05 at k +0.455  g<0     0 (  0 quoted)                    edge min +5.09e-10 <0     0/68051                        mass 0.999996  Lee 0.146
+  2027-02-19  g min +9.38e-05 at k +0.492  g<0     0 (  0 quoted)                    edge min +6.92e-10 <0     0/68239                        mass 0.999991  Lee 0.158
+  2027-02-26  g min +9.67e-05 at k +0.501  g<0     0 (  0 quoted)                    edge min +6.73e-10 <0     0/68300                        mass 0.999990  Lee 0.158
+  2027-03-19  g min +7.85e-05 at k +0.583  g<0     0 (  0 quoted)                    edge min +3.35e-10 <0     0/68376                        mass 0.999959  Lee 0.188
+  2027-03-31  g min +7.97e-05 at k +0.594  g<0     0 (  0 quoted)                    edge min +3.19e-10 <0     0/68454                        mass 0.999957  Lee 0.188
+  2027-06-17  g min +9.18e-05 at k +0.743  g<0     0 (  0 quoted)                    edge min +2.14e-10 <0     0/69158                        mass 0.999808  Lee 0.229
+  2027-06-30  g min +9.54e-05 at k +0.749  g<0     0 (  0 quoted)                    edge min +2.18e-10 <0     0/69169                        mass 0.999798  Lee 0.229
+  2027-09-17  g min +9.52e-05 at k +0.853  g<0     0 (  0 quoted)                    edge min +2.35e-10 <0     0/69870                        mass 0.999599  Lee 0.251
+  2027-09-30  g min +9.34e-05 at k +0.866  g<0     0 (  0 quoted)                    edge min +2.18e-10 <0     0/69931                        mass 0.999590  Lee 0.251
+  2027-12-17  g min +9.48e-05 at k +0.966  g<0     0 (  0 quoted)                    edge min +2.16e-10 <0     0/70620                        mass 0.999296  Lee 0.274
+  2028-01-21  g min +9.84e-05 at k +1.011  g<0     0 (  0 quoted)                    edge min +2.09e-10 <0     0/70914                        mass 0.999186  Lee 0.280
+  2028-06-16  g min +9.98e-05 at k +1.150  g<0     0 (  0 quoted)                    edge min +1.83e-10 <0     0/72197                        mass 0.998431  Lee 0.313
+  2028-12-15  g min +9.54e-05 at k +1.275  g<0     0 (  0 quoted)                    edge min +2.02e-10 <0     0/73817                        mass 0.997366  Lee 0.342
+  2029-01-19  g min +9.69e-05 at k +1.286  g<0     0 (  0 quoted)                    edge min +2.41e-10 <0     0/74066                        mass 0.997090  Lee 0.347
+  Calendar, each pair of neighbouring expiries: min of w_{i+1} - w_i on the grid, grid points below 0
+  (how many inside both expiries' quoted strikes) and their k range, and whether the wing slopes
+  keep the order beyond the grid
+  2026-10-26 -> 2026-10-27  min dw +1.996e-07  <0     0 (   0 quoted)                    wings ok
+  2026-10-27 -> 2026-10-28  min dw +5.454e-05  <0     0 (   0 quoted)                    wings ok
+  2026-10-28 -> 2026-10-29  min dw +5.188e-05  <0     0 (   0 quoted)                    wings ok
+  2026-10-29 -> 2026-10-30  min dw +6.206e-05  <0     0 (   0 quoted)                    wings ok
+  2026-10-30 -> 2026-11-02  min dw +5.816e-07  <0     0 (   0 quoted)                    wings ok
+  2026-11-02 -> 2026-11-03  min dw +7.025e-07  <0     0 (   0 quoted)                    wings ok
+  2026-11-03 -> 2026-11-04  min dw +1.927e-05  <0     0 (   0 quoted)                    wings ok
+  2026-11-04 -> 2026-11-05  min dw +4.753e-05  <0     0 (   0 quoted)                    wings ok
+  2026-11-05 -> 2026-11-06  min dw +5.869e-05  <0     0 (   0 quoted)                    wings ok
+  2026-11-06 -> 2026-11-13  min dw +2.104e-04  <0     0 (   0 quoted)                    wings ok
+  2026-11-13 -> 2026-11-20  min dw +2.761e-04  <0     0 (   0 quoted)                    wings ok
+  2026-11-20 -> 2026-11-27  min dw +7.943e-05  <0     0 (   0 quoted)                    wings ok
+  2026-11-27 -> 2026-11-30  min dw +4.445e-05  <0     0 (   0 quoted)                    wings ok
+  2026-11-30 -> 2026-12-04  min dw +1.737e-04  <0     0 (   0 quoted)                    wings ok
+  2026-12-04 -> 2026-12-18  min dw +1.269e-04  <0     0 (   0 quoted)                    wings ok
+  2026-12-18 -> 2026-12-31  min dw +3.111e-04  <0     0 (   0 quoted)                    wings ok
+  2026-12-31 -> 2027-01-15  min dw +4.048e-07  <0     0 (   0 quoted)                    wings ok
+  2027-01-15 -> 2027-01-29  min dw +1.953e-07  <0     0 (   0 quoted)                    wings ok
+  2027-01-29 -> 2027-02-19  min dw +5.140e-04  <0     0 (   0 quoted)                    wings ok
+  2027-02-19 -> 2027-02-26  min dw +1.453e-06  <0     0 (   0 quoted)                    wings ok
+  2027-02-26 -> 2027-03-19  min dw +1.359e-07  <0     0 (   0 quoted)                    wings ok
+  2027-03-19 -> 2027-03-31  min dw +1.915e-07  <0     0 (   0 quoted)                    wings ok
+  2027-03-31 -> 2027-06-17  min dw +1.213e-03  <0     0 (   0 quoted)                    wings ok
+  2027-06-17 -> 2027-06-30  min dw +5.628e-05  <0     0 (   0 quoted)                    wings ok
+  2027-06-30 -> 2027-09-17  min dw +3.287e-03  <0     0 (   0 quoted)                    wings ok
+  2027-09-17 -> 2027-09-30  min dw +5.095e-05  <0     0 (   0 quoted)                    wings ok
+  2027-09-30 -> 2027-12-17  min dw +3.623e-03  <0     0 (   0 quoted)                    wings ok
+  2027-12-17 -> 2028-01-21  min dw +1.302e-03  <0     0 (   0 quoted)                    wings ok
+  2028-01-21 -> 2028-06-16  min dw +5.946e-03  <0     0 (   0 quoted)                    wings ok
+  2028-06-16 -> 2028-12-15  min dw +1.097e-02  <0     0 (   0 quoted)                    wings ok
+  2028-12-15 -> 2029-01-19  min dw +3.142e-03  <0     0 (   0 quoted)                    wings ok
+  Between expiries (w linear in T at fixed k, 19 times per interval): 0 grid points with g < 0; min g +6.16e-05 at T = 56.69 days, k = +0.355
+  => 0 of 32 slices with butterfly arbitrage, 0 of 31 neighbouring pairs with calendar arbitrage
+
+wrote data/spy_full_2026-10-23/svi_surface.json
+wrote docs/svi_surface.png
+total time 279 s

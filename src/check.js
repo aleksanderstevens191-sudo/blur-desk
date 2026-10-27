@@ -9,13 +9,15 @@ import { kernelChecks } from "./kernel-check.js";
 import { chainChecks } from "./chain-check.js";
 import { oddsChecks } from "./odds-check.js";
 import { twoStockChecks } from "./check-2d.js";
+import { lvChecks } from "./check-lv.js";
 import SPY from "./spy_fit.json";
 
 const TOL = 1e-4;
 const out = document.getElementById("out");
 const log = (line = "") => (out.textContent += line + "\n");
 // /check.html?only=fft runs just the FFT section, ?only=kernels the fat-tailed kernels,
-// ?only=chain the full SPY chain, ?only=odds the market's odds, ?only=2d the two-stock blur
+// ?only=chain the full SPY chain, ?only=odds the market's odds, ?only=2d the two-stock blur,
+// ?only=lv the local-vol blur
 const only = new URLSearchParams(location.search).get("only");
 const run = (section) => !only || only === section;
 
@@ -95,6 +97,10 @@ async function main() {
   if (run("2d")) {
     log("\ntwo-stock options, 2D blur on the GPU (direct and FFT) vs Python (reference/make_2d_fixtures.py):");
     fails += await twoStockChecks(log, TOL);
+  }
+  if (run("lv")) {
+    log("\nlocal vol: the variable-width blur on the GPU vs Python (reference/make_lv_data.py):");
+    fails += await lvChecks(log, TOL);
   }
   log(fails ? `\n${fails} failed` : `\nall GPU results within 1e-4 of the Python reference${run("fft") ? ", FFT within 1e-4 of direct" : ""}`);
   document.title = fails ? "FAIL" : "PASS";
