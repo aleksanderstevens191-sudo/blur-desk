@@ -172,17 +172,16 @@ Commits are on branch `part5-diffusion` until it merges. The density is the mark
 | D9 | Tweedie's formula vs a Monte Carlo conditional mean, 2,000,000 pairs, σ 0.03 / 0.1 / 0.3 | every bin within 2.5 standard errors | ⚠ cloud | same |
 | D10 | Panel 16's own algorithm (dx 0.002, 128 Heun steps), 20,000 quantiles: CDF gap / L1 | 2.3e-4 / 8.7e-4 | ⚠ cloud (64-bit) | `reference/make_diffusion_fixtures.py` (CI `--check`) |
 | D11 | Panel 16's math in 64-bit JS vs Python | worst 1.8e-13 | ⚠ cloud | `src/test-diffusion.mjs` (CI) |
-| D12 | WGSL vs Python (`/check.html?only=diffusion`): density at 6 levels / call at 6 levels × 12 spots (per $100 of forward) / 2,048 sampler points (log-return) | SwiftShader: 1.3e-6 / 1.5e-5 / 5.6e-7 | Mac: to measure | SwiftShader: `/mnt/project-files/diffusion/stage4/check-diffusion-swiftshader.txt`; CI |
-| D13 | GPU time: all 129 noise levels' blur and score (6,001 nodes, one dispatch) / 65,536 points × 128 Heun steps | SwiftShader: 5.9 s / 43 ms (2,048 points), 0.3 s (65,536) | Mac: to measure | same |
-| D14 | Panel 16 live vs closed forms at 5 slider levels: price vs Black (per $100) / density vs Merton + blur | SwiftShader: worst **5.7e-5** / 1.3e-6 | Mac: to measure | `src/test-demo-diffusion.mjs` (CI) |
-| D15 | Panel 16's reverse run, 65,536 points from the blurred odds: KS vs the market; P(fall > 10%) | SwiftShader: D 0.0038, p 0.31; 7.44% vs 7.62% | Mac: to measure | same |
+| D12 | WGSL vs Python (`/check.html?only=diffusion`): density at 6 levels / call at 6 levels × 12 spots (per $100 of forward) / 2,048 sampler points (log-return) | worst **1.3e-6 / 1.6e-5 / 6.2e-7**, all 14 PASS | Mac, 2026-10-27 | `reference/diffusion_mac.txt` (8cf03e0); SwiftShader in CI: 1.3e-6 / 1.5e-5 / 5.6e-7 (`/mnt/project-files/diffusion/stage4/check-diffusion-swiftshader.txt`) |
+| D13 | GPU time: all 129 noise levels' blur and score (6,001 nodes, one dispatch) / 65,536 points × 128 Heun steps | check page **115 ms / 8 ms**; the demo at page load 380 ms / 11 ms | Mac, 2026-10-27 | same; SwiftShader check page: 5.3 s / 164 ms |
+| D14 | Panel 16 live vs closed forms: price vs Black (per $100) / density vs Merton + blur | slider all the way right **5.4e-5** / 1.2e-7; all the way left 0 / 4.4e-7 (2 of the 5 levels CI checks) | Mac, 2026-10-27 | `reference/diffusion_mac.txt`, from Alek's screenshots; SwiftShader in CI (`src/test-demo-diffusion.mjs`), 5 levels: worst 5.7e-5 / 1.3e-6 |
+| D15 | Panel 16's reverse run, 65,536 points from the blurred odds: KS vs the market; P(fall > 10%) | D 0.0038, **p 0.31**; 7.44% vs the market's 7.62%, the same as SwiftShader (same seeded start) | Mac, 2026-10-27 | same; the check page's own 65,536 points on both GPUs: D 0.0040, p 0.24; 7.69% vs 7.615% |
 
 ## Still to measure on the Mac
 
 1. QuantLib barriers on all cores, if you want a barrier ratio against all cores (Q3).
 2. Panel 14 on the Mac (T14): the live errors and the reprice time. Open the demo, scroll to 14 / TWO STOCKS and read the numbers off the panel.
-3. Panel 16 on the Mac (D12–D15): `/check.html?only=diffusion`, then the demo's 16 / DIFFUSION panel after pressing Play.
 
-Done on 2026-10-27: `/check.html?only=lv` (L15, all PASS) and panel 15 at 7, 28 and 98 days (L16, L18).
+Done on 2026-10-27: `/check.html?only=lv` (L15, all PASS) and panel 15 at 7, 28 and 98 days (L16, L18); `/check.html?only=diffusion` (D12, D13, all PASS) and panel 16 at both ends of the slider and after Play (D14, D15).
 
 Done on 2026-10-24: `/check.html?only=fixtures` (A8, A9, B4) and `/check.html?only=odds` (O1–O8), both all PASS, the demo's top bar and error counter (A2, A10, C7, C10) from Alek's screen recording, and the 15-second clip from `/?record=1` (A7, `docs/blur-desk-15s.mp4`).

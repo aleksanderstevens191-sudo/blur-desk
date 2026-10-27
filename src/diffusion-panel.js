@@ -168,7 +168,7 @@ function drawPay() {
     const x = Math.log(usdX / P.F);
     if (x > X_LO && x < X_HI) label(ctx, `$${usdX}`, xOf(x), b.y1 + 9, { size: 8, alpha: usdX === 770 ? 0.8 : 0.5 });
   }
-  label(ctx, `PAYOFF → PRICE · CALL $770 · r = 0 · ${(100 * P.flat).toFixed(1)}% VOL × ${horizon(sdOf(st.j))}`, b.x0, 8, { size: 8, align: "left", alpha: 0.6 });
+  label(ctx, `PAYOFF → PRICE · CALL $770 · r = 0 · ${(100 * P.flat).toFixed(1)}% VOL × ${horizon(sdOf(st.j))}`, b.x0, 8, { size: 8, align: "left", alpha: 0.6, max: W - b.x0 - 2 });
   label(ctx, "SPY FORWARD →", b.x1, b.y1 + 9, { size: 8, align: "right", alpha: 0.45 });
 }
 

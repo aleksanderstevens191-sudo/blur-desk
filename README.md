@@ -494,18 +494,24 @@ Here the density is the market's own: SPY's Dec 18 odds from panel 13. Blurred i
 
 `src/gpu-diffusion.js` runs three shaders. One dispatch blurs the density to all 129 noise levels and takes the score at each, as (blur of the density's slope) / (blur of the density). Every term of that ratio is positive, so 32-bit floats keep their precision out in the tails, which taking the log first would lose. A second shader blurs the call payoff by the same Gaussian. A third runs 65,536 points from noise back to the odds, with Heun's method in ln σ over 128 steps. `src/diffusion.js` is the same algorithm in 64-bit JavaScript (within 2e-13 of Python).
 
-| Check (`/check.html?only=diffusion`) | Software GPU (SwiftShader) | Mac |
+| Check (`/check.html?only=diffusion`) | Software GPU (SwiftShader) | Apple GPU (Metal-3, Chrome) |
 | --- | --- | --- |
-| The blurred density at 6 noise levels vs Python | worst **1.3e-6** per unit of density (peak 8.1) | |
-| The blurred call, 6 levels × 12 spots, per $100 of forward | worst **1.5e-5** | |
-| 2,048 points run back from noise vs Python | worst **5.6e-7** in log-return | |
-| 65,536 random points run back: KS vs the market | D 0.0040, p 0.24 | |
+| The blurred density at 6 noise levels vs Python | worst **1.3e-6** per unit of density (peak 8.1) | worst **1.3e-6** |
+| The blurred call, 6 levels × 12 spots, per $100 of forward | worst **1.5e-5** | worst **1.6e-5** |
+| 2,048 points run back from noise vs Python | worst **5.6e-7** in log-return | worst **6.2e-7** |
+| 65,536 random points run back: KS vs the market | D 0.0040, p 0.24 | D 0.0040, p 0.24 |
+| All 129 levels' blur and score, 6,001 nodes, one dispatch | 5.3 s | **115 ms** |
+| 65,536 points × 128 Heun steps | 164 ms | **8 ms** |
+
+The Mac readings are in `reference/diffusion_mac.txt`.
 
 ### In the demo
 
 **16 / DIFFUSION** puts the two blurs side by side under one slider. On the left a $770 call's payoff melts into its price (Black-Scholes at r = 0). On the right the market's Dec 18 odds melt into noise. The slider sets one Gaussian for both: on the left it reads as 14.6% vol over some number of days, on the right as the noise level σ. **Play** starts 65,536 points of noise and runs them back while the slider walks back with them, and the market's odds rebuild as an amber histogram. A chip picks the start: the odds blurred to σ = 1, or pure N(0, 1) noise, which differs from the blurred odds by 0.004 in L1.
 
 `src/test-demo-diffusion.mjs` drives the panel at five slider levels and both starts. On SwiftShader the live errors against the closed forms (Black's formula on the left, Merton's mixture plus the blur's variance on the right) stayed under 5.7e-5, and the reverse run passed KS (p 0.31) with P(fall > 10%) at 7.44% against the market's 7.62%.
+
+On Alek's Mac the panel read 5.4e-5 with the slider all the way right and 4.4e-7 all the way left. It built its 129 levels in 380 ms and ran the 65,536 points back in 11 ms. The run starts from the same seeded points on every machine, and it gave the same KS result as SwiftShader (D 0.0038, p 0.31) and the same 7.44%.
 
 ![Panel 16 of the demo](docs/demo_diffusion.png)
 
@@ -597,6 +603,7 @@ src/localvol.js, test-demo-lv.mjs  the demo's panel 15, and its headless check
 reference/diffusion.py             Part 5: the two blurs, the VE and DDPM forward processes, the sampler, panel 16's algorithm
 reference/diffusion_stage1.py, diffusion_stage2.py  the duality and forward-process checks; the reverse run, KS, Tweedie
 reference/make_diffusion_fixtures.py  writes src/diffusion_fixtures.json (--check recomputes it for CI)
+reference/diffusion_mac.txt        panel 16 and /check.html?only=diffusion on Alek's Mac
 docs/diffusion_claims.md           the wording audit: exact, approximately true or false, with citations
 src/diffusion.js, test-diffusion.mjs  panel 16's math in 64-bit JS, and its check against Python
 src/gpu-diffusion.js, check-diffusion.js  WGSL: every noise level's blur and score, the payoff blur, the sampler (/check.html?only=diffusion)

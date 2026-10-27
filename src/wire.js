@@ -80,12 +80,13 @@ export function glow(ctx, path, rgb, alpha = 1, width = 1, halo = 1) {
 // Text size multiplier for every canvas label (the recording mode enlarges them)
 export const TEXT = { scale: 1 };
 
-export function label(ctx, text, x, y, { rgb = "200,204,210", alpha = 0.75, align = "center", base = "middle", size = 10, weight = 500 } = {}) {
+export function label(ctx, text, x, y, { rgb = "200,204,210", alpha = 0.75, align = "center", base = "middle", size = 10, weight = 500, max } = {}) {
   ctx.font = `${weight} ${size * TEXT.scale}px ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
   ctx.fillStyle = `rgba(${rgb},${alpha})`;
   ctx.textAlign = align;
   ctx.textBaseline = base;
-  ctx.fillText(text, x, y);
+  if (max) ctx.fillText(text, x, y, max);   // squeezed to fit, rather than cut off at the canvas edge
+  else ctx.fillText(text, x, y);
 }
 
 // Size a canvas to its CSS box at device resolution; returns [W, H] in CSS px.
