@@ -163,3 +163,71 @@ def ddpm_particles(x0, betas, rng, keep=()):
         if i in keep:
             out[i] = x.copy()
     return x, out
+
+
+# ---------- Stage 2: the reverse run (probability-flow ODE, exact score on the grid) ----------
+
+class GridScore:
+    """The score d/dy log p_sigma(y) of the market's density blurred to noise level
+    sigma, from the grid alone: blur the grid density (the VE forward process,
+    variance sigma^2 - sigma_min^2), take the log, central differences. No network.
+    score(x, sigma) interpolates it at any points x."""
+
+    def __init__(self, y, p0, smin):
+        self.y, self.p0, self.smin = y, p0, smin
+        self.dx = y[1] - y[0]
+        self.cache = {}
+
+    def table(self, sigma):
+        key = float(sigma)
+        if key not in self.cache:
+            v = sigma * sigma - self.smin * self.smin
+            p = self.p0 if v <= 0 else blur_density(self.p0, gauss_taps(self.dx, np.sqrt(v)))
+            self.cache[key] = np.gradient(np.log(np.maximum(p, 1e-300)), self.dx)
+            if len(self.cache) > 8:
+                self.cache.pop(next(iter(self.cache)))
+        return self.cache[key]
+
+    def __call__(self, x, sigma):
+        return np.interp(x, self.y, self.table(sigma))
+
+
+def pf_ode(x1, score, smin, smax, N):
+    """Probability-flow ODE of the VE SDE (Song et al. 2021, eq. 13),
+        dx/dt = -g(t)^2 / 2 * score(x, t),   g^2 = d sigma^2 / dt,
+    run backward from sigma_max to sigma_min. In s = ln sigma it reads
+    dx/ds = -sigma^2 score(x, sigma); classical RK4, N steps uniform in s."""
+    s = np.linspace(np.log(smax), np.log(smin), N + 1)
+    x = np.array(x1, float)
+    f = lambda x_, s_: -np.exp(2 * s_) * score(x_, np.exp(s_))
+    for i in range(N):
+        h = s[i + 1] - s[i]
+        k1 = f(x, s[i])
+        k2 = f(x + 0.5 * h * k1, s[i] + 0.5 * h)
+        k3 = f(x + 0.5 * h * k2, s[i] + 0.5 * h)
+        k4 = f(x + h * k3, s[i + 1])
+        x = x + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+    return x
+
+
+def mix_ppf(u, comps, lo=-8.0, hi=8.0, iters=80):
+    """Inverse CDF of a Gaussian mixture by bisection (vectorized)."""
+    u = np.asarray(u, float)
+    a, b = np.full_like(u, lo), np.full_like(u, hi)
+    for _ in range(iters):
+        c = 0.5 * (a + b)
+        below = mix_cdf(c, comps) < u
+        a, b = np.where(below, c, a), np.where(below, b, c)
+    return 0.5 * (a + b)
+
+
+def tweedie_exact(x, comps, s2):
+    """E[x_0 | x_t = x] when x_t = x_0 + N(0, s2) and x_0 is the Gaussian mixture
+    comps: each component's posterior mean, weighted by its posterior weight."""
+    x = np.asarray(x, float)
+    num, den = 0.0, 0.0
+    for w, m, v in comps:
+        pk = w * np.exp(-0.5 * (x - m) ** 2 / (v + s2)) / np.sqrt(2 * np.pi * (v + s2))
+        num = num + pk * (m + v / (v + s2) * (x - m))
+        den = den + pk
+    return num / den

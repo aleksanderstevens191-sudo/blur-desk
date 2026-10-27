@@ -1,0 +1,40 @@
+SPY Dec 18 (T 0.1562), the market's density from panel 13's Merton fit, on 32001 nodes, dx 0.0005.
+Forward: VE, sigma 0.01 -> 1.0 (Stage 1). Reverse: probability-flow ODE, RK4, 400 steps in ln sigma,
+score = central differences of log(grid density blurred to sigma), interpolated linearly.
+
+1. The score from the grid vs the closed form
+   PASS sigma 0.01 : max |grid - exact| 1.9e-03 over the middle 1 - 2e-6 of the mass (largest score 101; relative 1.8e-05 < 1e-4)
+   PASS sigma 0.03 : max |grid - exact| 7.1e-04 over the middle 1 - 2e-6 of the mass (largest score 93; relative 7.7e-06 < 1e-4)
+   PASS sigma 0.1  : max |grid - exact| 1.7e-05 over the middle 1 - 2e-6 of the mass (largest score 44; relative 4.0e-07 < 1e-4)
+   PASS sigma 0.3  : max |grid - exact| 2.0e-07 over the middle 1 - 2e-6 of the mass (largest score 16; relative 1.3e-08 < 1e-4)
+   PASS sigma 1.0  : max |grid - exact| 1.3e-08 over the middle 1 - 2e-6 of the mass (largest score 5; relative 2.7e-09 < 1e-4)
+
+2. The reverse run on a quantile ladder (deterministic)
+        200,000 points from the blurred density's quantiles u_i = (i + 1/2)/M, run back to sigma_min (4.5 s)
+   PASS the flow keeps the points in order (in 1D the flow carries quantiles to quantiles)
+   PASS the market's CDF at the landed points vs u_i: max gap 3.0e-06 (< 1e-5; the Kolmogorov distance of the recovered odds)
+   PASS grid score vs closed-form score, same ODE: points land within 8.8e-07 of each other (< 1e-5 in log-return)
+   PASS L1 between the recovered density (1/M of mass between landed neighbours) and the market's: 2.2e-05 (< 1e-3; 2 = disjoint)
+        (the same L1 at the start, the blurred density vs the market: 1.711)
+   PASS P(SPY fall > 10% by Dec 18): recovered 7.615%, market 7.615% (panel 13)
+   PASS P(SPY rise > 10% by Dec 18): recovered 2.988%, market 2.988% (panel 13)
+
+3. 100,000 random samples, run in reverse
+   PASS KS vs the market's CDF: D 0.0024, p 0.62 (p > 0.01)
+   PASS KS vs flat Black-Scholes (14.58%): D 0.0973, p 0e+00 (the test tells the market from flat vol)
+        the starting samples vs the market: D 0.449 (they are noise until the reverse run)
+        histogram L1 (190 bins of 0.005): reverse-run samples 0.0219, 100,000 exact draws from the market 0.0176 (sampling noise, the same size)
+        starting from pure noise N(0, 1.0^2) instead (Stage 1: 1.0-blurred market is 0.0039 from it in L1): KS D 0.0045, p 0.04
+
+4. Tweedie's formula: E[x_0 | x_t] = x_t + s^2 score(x_t), s^2 = sigma^2 - sigma_min^2
+   PASS sigma 0.03: 40 bins of x_t (50,000 pairs each): max |MC - Tweedie| 2.5e-04, worst 2.4 standard errors, chi^2 35 on 40
+   PASS sigma 0.03: Tweedie from the grid score vs the closed-form posterior mean: max |diff| 5.7e-07 over 2,000,000 points
+   PASS sigma 0.1: 40 bins of x_t (50,000 pairs each): max |MC - Tweedie| 9.0e-04, worst 2.5 standard errors, chi^2 40 on 40
+   PASS sigma 0.1: Tweedie from the grid score vs the closed-form posterior mean: max |diff| 1.7e-07 over 2,000,000 points
+   PASS sigma 0.3: 40 bins of x_t (50,000 pairs each): max |MC - Tweedie| 7.9e-04, worst 2.4 standard errors, chi^2 42 on 40
+   PASS sigma 0.3: Tweedie from the grid score vs the closed-form posterior mean: max |diff| 2.0e-08 over 2,000,000 points
+        Tweedie's denoised mean is an average over every x_0 that could have produced x_t: at sigma 0.3 it is a
+        smooth curve, not a sample. The sampler (sections 2-3) reaches the market's odds by many small steps instead.
+
+all Stage 2 checks pass (151 s)
+plot: /mnt/project-files/diffusion/stage2-sampler.png
