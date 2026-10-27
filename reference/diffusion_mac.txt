@@ -1,0 +1,46 @@
+Panel 16 / DIFFUSION on Alek's Mac (apple metal-3, Chrome), 2026-10-27 about 19:35 UTC.
+Source: the part5-diffusion preview (commit 8cf03e0). The check page's text is pasted below as Alek
+sent it. The demo readings come from two screenshots of the panel: the slider all the way right
+(level 128, sigma 1), then after Play, which ends with the slider all the way left (level 0).
+Levels 32, 64 and 96 and the pure N(0, 1) start were not read on the Mac.
+
+== /check.html?only=diffusion: all PASS ==
+GPU: apple metal-3
+tolerance: |gpu - py| < 0.0001
+
+diffusion: the market's odds blurred to noise and run back, the payoff blurred alike, GPU vs Python (reference/make_diffusion_fixtures.py):
+2026-12-18: 6001 nodes, dx 0.002, 129 noise levels 0.01 -> 1 (log-return units)
+every level's blurred density and score in one dispatch: 115 ms
+PASS density, level   0 (sigma 0.0100): |gpu - py| 2.15e-7 per unit of y (peak 8.102)
+PASS density, level  16 (sigma 0.0178): |gpu - py| 1.21e-6 per unit of y (peak 7.629)
+PASS density, level  32 (sigma 0.0316): |gpu - py| 1.27e-6 per unit of y (peak 6.573)
+PASS density, level  64 (sigma 0.1000): |gpu - py| 2.59e-7 per unit of y (peak 3.404)
+PASS density, level  96 (sigma 0.3162): |gpu - py| 2.24e-7 per unit of y (peak 1.236)
+PASS density, level 128 (sigma 1.0000): |gpu - py| 7.66e-8 per unit of y (peak 0.398)
+PASS payoff, level   0 (sd 0.0000): call K $770 at 12 spots, |gpu - py| 0.00e+0 per $100 of forward (0.0 ms)
+PASS payoff, level  16 (sd 0.0147): call K $770 at 12 spots, |gpu - py| 6.93e-6 per $100 of forward (27.8 ms)
+PASS payoff, level  32 (sd 0.0300): call K $770 at 12 spots, |gpu - py| 7.24e-6 per $100 of forward (1.0 ms)
+PASS payoff, level  64 (sd 0.0995): call K $770 at 12 spots, |gpu - py| 1.62e-5 per $100 of forward (1.0 ms)
+PASS payoff, level  96 (sd 0.3161): call K $770 at 12 spots, |gpu - py| 3.95e-6 per $100 of forward (0.9 ms)
+PASS payoff, level 128 (sd 0.9999): call K $770 at 12 spots, |gpu - py| 1.22e-5 per $100 of forward (0.9 ms)
+PASS sampler, 2,048 quantiles of the noise run back: |gpu - py| 5.59e-7 at level 64, 6.16e-7 at level 0 (log-return; 30 ms)
+PASS 65,536 random points of noise run back to the market's odds: KS D 0.0040, p 0.24; P(fall > 10%) 7.69% vs the market's 7.615% (8 ms)
+
+all GPU results within 1e-4 of the Python reference
+
+The first payoff run (27.8 ms) and the first sampler run (30 ms, 2,048 points) also build their
+shader pipelines; the later runs (about 1 ms, and 8 ms for 65,536 points) do not.
+
+== Demo, panel 16 ==
+slider far right (level 128): blur sd 1.000, noise sigma 1.000, 14.6% vol over 47.1 years
+  GPU vs closed forms: price 5.4e-5 per $100 (Black), density 1.2e-7 (Merton + blur)
+after Play (65,536 points from the odds blurred to sigma 1), slider back at level 0 (sigma 0.010):
+  GPU vs closed forms: price 0.0e+0 per $100 (Black), density 4.4e-7 (Merton + blur)
+  rebuilt odds vs the market: KS D 0.0038, p 0.31; P(fall > 10%) 7.44%, market 7.62%
+GPU time: 129 levels x 6,001 nodes of blur and score 380 ms (at page load); 65,536 points x 128 Heun steps 11 ms
+
+The same panel on SwiftShader (src/test-demo-diffusion.mjs, /mnt/project-files/diffusion/stage4/):
+worst live error 5.7e-5 over levels 0, 32, 64, 96, 128; reverse run KS D 0.0038, p 0.31, 7.44% vs 7.62%.
+The reverse run starts from the same seeded points on every machine, and the two GPUs gave the
+same KS statistic to 4 digits. The check page on SwiftShader: density 1.3e-6, call 1.5e-5, sampler
+5.6e-7, tables 5,333 ms, 65,536 points 164 ms (/mnt/project-files/diffusion/stage4/check-diffusion-swiftshader.txt).

@@ -1,4 +1,4 @@
-# Every push: the Python reference checks (two stocks and local vol included), the full SPY chain rerun from its
+# Every push: the Python reference checks (two stocks, local vol and diffusion included), the full SPY chain rerun from its
 # saved snapshot, the JS core against the Python fixtures and a build of the
 # demo pages, and the WebGPU shaders against the same fixtures in headless
 # Chromium on its software GPU (SwiftShader). A check that fails exits
@@ -42,6 +42,12 @@ jobs:
         run: python reference/intuition_2d.py
       - name: Local vol, surface arbitrage, Dupire, the blur vs Black-Scholes, GPU fixtures, model risk
         run: python reference/check_lv_ci.py
+      - name: Diffusion, pricing blurs a payoff and the VE forward process blurs a density (duality 1e-12, forward 1e-10)
+        run: python reference/diffusion_stage1.py
+      - name: Diffusion, the probability-flow ODE run back to the market's odds (L1, KS, Tweedie vs Monte Carlo)
+        run: python reference/diffusion_stage2.py
+      - name: Diffusion, panel 16's fixtures recomputed
+        run: python reference/make_diffusion_fixtures.py --check
 
   chain:
     name: Full SPY chain, rerun from the saved snapshot
@@ -81,6 +87,8 @@ jobs:
         run: node src/test-2d.mjs
       - name: Local vol, the variable-width blur in 64-bit JS vs Python, flat vol vs Black-Scholes
         run: node src/test-lv.mjs
+      - name: Diffusion, panel 16's blurs and reverse sampler in 64-bit JS vs Python
+        run: node src/test-diffusion.mjs
       - run: npm ci
       - name: Build the demo, check and bench pages
         run: npm run build
@@ -116,3 +124,7 @@ jobs:
         run: node src/test-gpu.mjs lv
       - name: Local vol, the demo's panel 15 driven like a user, live round trip under 0.1 vol pts
         run: node src/test-demo-lv.mjs
+      - name: Diffusion, panel 16's blurs and reverse sampler on the GPU vs Python
+        run: node src/test-gpu.mjs diffusion
+      - name: Diffusion, the demo's panel 16 driven like a user, live errors under 1e-4, the reverse run passes KS
+        run: node src/test-demo-diffusion.mjs

@@ -13,6 +13,7 @@ An option's price is its payoff, blurred. Blurring an image and pricing an optio
 - **Two stocks:** blur a payoff drawn on S1 × S2 with an ellipse that the correlation tilts, and out come exchange, best-of and spread options (within 2e-7 of Margrabe, Stulz and QuantLib).
 - **Local volatility:** give every spot and every day its own blur width, fitted so every liquid SPY vanilla comes back within 0.073 vol points, and watch barrier prices move by up to $31 between models fitted to the same vanillas.
 - **The market's odds:** run the edge-detect kernel `[1, -2, 1]` across a row of call prices and out comes the probability distribution the market is pricing (Breeden–Litzenberger, 1978).
+- **Diffusion models:** pricing blurs a payoff, and the forward process of an image diffusion model blurs a probability density. Blur the market's odds into noise, run a diffusion sampler back with the score computed from the density itself (no neural network), and the odds come back to within 2e-5.
 
 **Try it:** https://blur-desk.vercel.app · **Watch:** [the 15-second clip](docs/blur-desk-15s.mp4), recorded on a Mac with `/?record=1`
 
@@ -453,16 +454,77 @@ On Alek's Mac the round trips were 0.015, 0.071 and 0.046 vol points at 7, 28 an
 
 ![Panel 15 of the demo](docs/demo_local_vol.png)
 
+## Diffusion models
+
+Image generators such as Stable Diffusion learn by blurring pictures into noise and then learning to undo the blur. The blurring half, the "forward process", is the same Gaussian blur this project prices options with. The difference is what gets blurred:
+
+- **Pricing blurs a payoff.** Take what an option pays at expiry, blur it, and you get its price today.
+- **A diffusion model's forward process blurs a probability density.** Take the odds of every outcome, blur them, and they spread out into noise.
+
+With a constant volatility, both are the heat equation. They run in opposite directions in calendar time: the price runs from expiry back to today, the density runs from the data toward noise. They are also two views of one number: the price from blurring the payoff equals the payoff averaged over the blurred density.
+
+Here the density is the market's own: SPY's Dec 18 odds from panel 13. Blurred into noise and then run back by a diffusion sampler, it comes back. The sampler is the probability-flow ODE of Song et al. (2021). It needs the "score", the slope of the log of the blurred density. Image models train a neural network to guess the score. Here the density is known, so the score is computed from the density itself on the grid (within 2e-5 of its closed form), and there is no network.
+
+### Checks (Python, 64-bit)
+
+| Check | Result | Source |
+| --- | --- | --- |
+| Duality on the grid: Σ density × blurred payoff vs Σ blurred density × payoff, 6 options | **$3e-13** (target 1e-12) | `reference/diffusion_stage1_results.txt` |
+| Duality by quadrature: the payoff averaged against SPY's Merton density vs Merton's series, 4 options | **$7e-14** | same |
+| The variance-exploding forward process (1,000 steps) on SPY's Dec 18 density vs one Gaussian blur of it in closed form | **6e-14** per unit of density (target 1e-10) | same |
+| DDPM (Ho et al. 2020) divided by √ᾱ vs the variance-exploding process | 2e-15 | same |
+| The reverse run from noise, 200,000 quantile points: L1 to the market's density / largest CDF gap | **2.2e-5** / 3e-6; P(fall > 10%) 7.615%, P(rise > 10%) 2.988%, as panel 13 | `reference/diffusion_stage2_results.txt` |
+| 100,000 random samples run back: KS test vs the market / vs flat 14.6% Black-Scholes | D 0.0024, **p 0.62** / D 0.097, rejected | same |
+| Tweedie's formula vs a Monte Carlo conditional mean, 2,000,000 pairs at σ 0.03 / 0.1 / 0.3 | every bin within 2.5 standard errors | same |
+
+`reference/diffusion.py` holds the math; `diffusion_stage1.py` and `diffusion_stage2.py` print the checks and exit non-zero if one fails.
+
+![The payoff melts into a price; the market's odds melt into noise](docs/diffusion_blurs.png)
+
+![Noise run back to the market's odds, the paths, and Tweedie's denoised mean](docs/diffusion_sampler.png)
+
+### What it does not say
+
+`docs/diffusion_claims.md` marks every sentence about this as exact, approximately true or false, with a citation. The three that matter most:
+- **Pricing is not a diffusion model running in reverse.** A diffusion model's reverse run removes blur; pricing adds it. "Opposite directions" means opposite in calendar time only.
+- **DDPM's shrink step is not discounting.** DDPM multiplies the data by √(1 − β) at each step. That plays the role of Black-Scholes' drift: dividing by √ᾱ removes it, as discounting the stock removes the drift. Discounting itself has no counterpart, because it scales a value and a density's total stays 1.
+- **Nothing here forecasts SPY.** The odds are risk-neutral, read off one day's option prices, and the sampler returns exactly what went in, to within 2e-5.
+
+### On the GPU
+
+`src/gpu-diffusion.js` runs three shaders. One dispatch blurs the density to all 129 noise levels and takes the score at each, as (blur of the density's slope) / (blur of the density). Every term of that ratio is positive, so 32-bit floats keep their precision out in the tails, which taking the log first would lose. A second shader blurs the call payoff by the same Gaussian. A third runs 65,536 points from noise back to the odds, with Heun's method in ln σ over 128 steps. `src/diffusion.js` is the same algorithm in 64-bit JavaScript (within 2e-13 of Python).
+
+| Check (`/check.html?only=diffusion`) | Software GPU (SwiftShader) | Apple GPU (Metal-3, Chrome) |
+| --- | --- | --- |
+| The blurred density at 6 noise levels vs Python | worst **1.3e-6** per unit of density (peak 8.1) | worst **1.3e-6** |
+| The blurred call, 6 levels × 12 spots, per $100 of forward | worst **1.5e-5** | worst **1.6e-5** |
+| 2,048 points run back from noise vs Python | worst **5.6e-7** in log-return | worst **6.2e-7** |
+| 65,536 random points run back: KS vs the market | D 0.0040, p 0.24 | D 0.0040, p 0.24 |
+| All 129 levels' blur and score, 6,001 nodes, one dispatch | 5.3 s | **115 ms** |
+| 65,536 points × 128 Heun steps | 164 ms | **8 ms** |
+
+The Mac readings are in `reference/diffusion_mac.txt`.
+
+### In the demo
+
+**16 / DIFFUSION** puts the two blurs side by side under one slider. On the left a $770 call's payoff melts into its price (Black-Scholes at r = 0). On the right the market's Dec 18 odds melt into noise. The slider sets one Gaussian for both: on the left it reads as 14.6% vol over some number of days, on the right as the noise level σ. **Play** starts 65,536 points of noise and runs them back while the slider walks back with them, and the market's odds rebuild as an amber histogram. A chip picks the start: the odds blurred to σ = 1, or pure N(0, 1) noise, which differs from the blurred odds by 0.004 in L1.
+
+`src/test-demo-diffusion.mjs` drives the panel at five slider levels and both starts. On SwiftShader the live errors against the closed forms (Black's formula on the left, Merton's mixture plus the blur's variance on the right) stayed under 5.7e-5, and the reverse run passed KS (p 0.31) with P(fall > 10%) at 7.44% against the market's 7.62%.
+
+On Alek's Mac the panel read 5.4e-5 with the slider all the way right and 4.4e-7 all the way left. It built its 129 levels in 380 ms and ran the 65,536 points back in 11 ms. The run starts from the same seeded points on every machine, and it gave the same KS result as SwiftShader (D 0.0038, p 0.31) and the same 7.44%.
+
+![Panel 16 of the demo](docs/demo_diffusion.png)
+
 ## What GitHub Actions checks
 
 Every push runs four jobs (`.github/workflows/checks.yml`); any failure turns the run red:
 
 | Job | What it checks |
 | --- | --- |
-| Python reference | `check.py`, the three barrier checks, and for fat tails: `check_kernels.py` (the table above), `check_smile.py` (no smile from a Gaussian, flattening with maturity, the negative-jump skew), `check_calibration.py` (the synthetic chain) and `check_spy_fit.py` (re-runs the SPY fit from the committed snapshot: it must reproduce `src/spy_fit.json`, beat flat Black-Scholes at least 4 times, stay within 1 vol point of every quote and fit a negative mean jump); for two stocks, `check_2d.py` (Margrabe, Stulz, the ρ = 0 product, QuantLib on 60 random markets, fourth-order convergence) and `intuition_2d.py` (the exchange value falls at every step of the correlation sweep; the spread referee and Kirk vs QuantLib); for local vol, `check_lv_ci.py` (the surface has no butterfly or calendar arbitrage, Gatheral's Dupire matches Dupire on prices, the blur at a flat vol matches Black-Scholes, the GPU's fixtures are reproduced exactly, and the 98-day up-and-out call under all three models matches the committed model-risk table) |
+| Python reference | `check.py`, the three barrier checks, and for fat tails: `check_kernels.py` (the table above), `check_smile.py` (no smile from a Gaussian, flattening with maturity, the negative-jump skew), `check_calibration.py` (the synthetic chain) and `check_spy_fit.py` (re-runs the SPY fit from the committed snapshot: it must reproduce `src/spy_fit.json`, beat flat Black-Scholes at least 4 times, stay within 1 vol point of every quote and fit a negative mean jump); for two stocks, `check_2d.py` (Margrabe, Stulz, the ρ = 0 product, QuantLib on 60 random markets, fourth-order convergence) and `intuition_2d.py` (the exchange value falls at every step of the correlation sweep; the spread referee and Kirk vs QuantLib); for local vol, `check_lv_ci.py` (the surface has no butterfly or calendar arbitrage, Gatheral's Dupire matches Dupire on prices, the blur at a flat vol matches Black-Scholes, the GPU's fixtures are reproduced exactly, and the 98-day up-and-out call under all three models matches the committed model-risk table); for diffusion, `diffusion_stage1.py` (duality, the forward process), `diffusion_stage2.py` (the reverse run, KS, Tweedie) and `make_diffusion_fixtures.py --check` |
 | Full SPY chain | `check_chain_fit.py` reruns the whole pipeline from the saved snapshot (filters, parity forwards with early exercise, European vols, the Merton fit per expiry and the reference prices) and must reproduce the committed `stage1.json` and `src/chain_data.json` (the refit's Merton prices to within 1e-4 dollars, because least squares lands a little differently on other numpy and scipy builds; the committed prices must follow exactly from the committed fit); `chain_oos.py --check` must reproduce every out-of-sample number. About 4 minutes |
-| JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves) `test-chain.mjs` (the whole chain's jobs vs QuantLib and Merton's series) `test-odds.mjs` (the market's odds) `test-2d.mjs` (the 2D blur vs Python to 1e-9, the 2D FFT vs direct, the wraparound sentinel) and `test-lv.mjs` (the variable-width blur vs Python to 1e-9, flat vol vs Black-Scholes), then a build of every page |
-| WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, the fat-tailed kernels and smile, the whole SPY chain in one submit, the market's odds, the two-stock fixtures (direct and 2D FFT, with the wraparound test) and the local-vol step, all in 32-bit floats within 1e-4 of Python; then `src/test-demo-2d.mjs` drives the demo's panel 14 through 11 states and needs every live error under 1e-4, and `src/test-demo-lv.mjs` drives panel 15 through four expiries and needs every live round trip under 0.1 vol points |
+| JS core | the 64-bit JavaScript against the Python fixtures: `test.mjs`, `test-barriers.mjs`, `test-fft.mjs` (FFT vs direct, wraparound) `test-kernels.mjs` (special functions, kernels, strikes, smile, demo curves) `test-chain.mjs` (the whole chain's jobs vs QuantLib and Merton's series) `test-odds.mjs` (the market's odds) `test-2d.mjs` (the 2D blur vs Python to 1e-9, the 2D FFT vs direct, the wraparound sentinel) `test-lv.mjs` (the variable-width blur vs Python to 1e-9, flat vol vs Black-Scholes) and `test-diffusion.mjs` (panel 16's blurs and sampler vs Python), then a build of every page |
+| WebGPU shaders | `src/test-gpu.mjs` runs `/check.html` in headless Chromium on its software GPU (SwiftShader, as the runners have no GPU): the vanilla, American and barrier fixtures, the FFT checks, the fat-tailed kernels and smile, the whole SPY chain in one submit, the market's odds, the two-stock fixtures (direct and 2D FFT, with the wraparound test), the local-vol step and panel 16's blurs and sampler, all in 32-bit floats within 1e-4 of Python; then `src/test-demo-2d.mjs` drives the demo's panel 14 through 11 states and needs every live error under 1e-4, `src/test-demo-lv.mjs` drives panel 15 through four expiries and needs every live round trip under 0.1 vol points, then `test-gpu.mjs diffusion` (panel 16's shaders vs Python) and `src/test-demo-diffusion.mjs` (five slider levels under 1e-4, the reverse run must pass KS) |
 
 ## Layout
 
@@ -538,6 +600,14 @@ src/lv.js, test-lv.mjs             the local-vol step in 64-bit JS, and its chec
 src/gpu-lv.js, check-lv.js         WGSL: the variable-width step (/check.html?only=lv)
 src/lv-f32-emulation.mjs           that step emulated in 32-bit JS: why it averages changes, not values
 src/localvol.js, test-demo-lv.mjs  the demo's panel 15, and its headless check
+reference/diffusion.py             Part 5: the two blurs, the VE and DDPM forward processes, the sampler, panel 16's algorithm
+reference/diffusion_stage1.py, diffusion_stage2.py  the duality and forward-process checks; the reverse run, KS, Tweedie
+reference/make_diffusion_fixtures.py  writes src/diffusion_fixtures.json (--check recomputes it for CI)
+reference/diffusion_mac.txt        panel 16 and /check.html?only=diffusion on Alek's Mac
+docs/diffusion_claims.md           the wording audit: exact, approximately true or false, with citations
+src/diffusion.js, test-diffusion.mjs  panel 16's math in 64-bit JS, and its check against Python
+src/gpu-diffusion.js, check-diffusion.js  WGSL: every noise level's blur and score, the payoff blur, the sampler (/check.html?only=diffusion)
+src/diffusion-panel.js, test-demo-diffusion.mjs  the demo's panel 16, and its headless check
 .github/workflows/checks.yml       CI: every Python check, every JS test, the build and the GPU check page, on every push
 ```
 
@@ -564,6 +634,9 @@ node src/test-odds.mjs
 python3 reference/check_2d.py
 python3 reference/intuition_2d.py
 node src/test-2d.mjs
+python3 reference/diffusion_stage1.py
+python3 reference/diffusion_stage2.py   # about 2.5 minutes
+node src/test-diffusion.mjs
 
 npm install
 npm run dev        # open the printed URL in a WebGPU browser (Chrome, Edge, Safari 26)
@@ -571,7 +644,7 @@ npm run dev        # open the printed URL in a WebGPU browser (Chrome, Edge, Saf
                    # /?record=1   the 15-second clip in a 1080 x 1080 frame (space plays, R resets;
                    #              &autoplay=1 starts when ready, &scale=0.5 for 1080 device px on a 2x screen)
                    # /check.html  the GPU vs Python fixture check
-                   #              (?only=fixtures, fft, kernels, chain, odds or 2d for one section)
+                   #              (?only=fixtures, fft, kernels, chain, odds, 2d, lv or diffusion for one section)
                    # /bench.html  the barrier benchmark
                    # /fft-bench.html  FFT vs direct blur, crossover sweep
                    # /chain-bench.html  the whole SPY chain: GPU compute only and end to end
@@ -581,6 +654,7 @@ npm run build
 npm i --no-save playwright && npx playwright install chromium
 node src/test-gpu.mjs   # /check.html in headless Chromium on a software GPU, as CI runs it
 node src/test-demo-2d.mjs   # the demo's two-stock panel, driven headless
+node src/test-demo-diffusion.mjs   # the demo's diffusion panel, driven headless
 ```
 
 ## The rest of the week

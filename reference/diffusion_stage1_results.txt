@@ -1,0 +1,73 @@
+SPY 2026-10-22, last $763.96; Merton fit sigma 0.0957, 1.671 jumps/yr, mean jump -0.0946, jump sd 0.0498; flat vol 0.1458 (src/spy_fit.json)
+Coordinate: log-return y = ln(S_T / S), S the slice's spot net of dividends (as in the pricing blur).
+
+1. The market's density is panel 13's
+   PASS 2026-11-20: P(fall > 10%) 4.287%, P(rise > 10%) 0.175%; panel 13 (node src/test-odds.mjs) 4.287% / 0.175%
+   PASS 2026-11-20: e^rT d2C/dK2 of Merton's series prices ($0.05 steps) vs the density, 6 strikes $650-$830: worst relative gap 2.1e-06 (< 1e-5)
+   PASS 2026-12-18: P(fall > 10%) 7.615%, P(rise > 10%) 2.988%; panel 13 (node src/test-odds.mjs) 7.615% / 2.988%
+   PASS 2026-12-18: e^rT d2C/dK2 of Merton's series prices ($0.05 steps) vs the density, 6 strikes $650-$830: worst relative gap 2.8e-07 (< 1e-5)
+
+2. Duality: blur the payoff, or blur the density and average the payoff against it
+   continuous (quadrature of payoff x density vs closed-form prices, $ per option on SPY):
+   PASS 2026-11-20 call K 770 Merton: e^-rT E[f] $11.056164503943 vs series $11.056164503943: |diff| 6.8e-14 (< 1e-12)
+   PASS 2026-11-20 put K 700 Merton: e^-rT E[f] $1.904528238947 vs series $1.904528238947: |diff| 3.1e-15 (< 1e-12)
+   PASS 2026-11-20 call K 770 Black-Scholes flat 0.1458: $11.677090347933 vs closed form $11.677090347933: |diff| 2.3e-14
+   PASS 2026-12-18 call K 770 Merton: e^-rT E[f] $17.076928299162 vs series $17.076928299162: |diff| 5.3e-14 (< 1e-12)
+   PASS 2026-12-18 put K 700 Merton: e^-rT E[f] $3.809400668352 vs series $3.809400668352: |diff| 9.3e-15 (< 1e-12)
+   PASS 2026-12-18 call K 770 Black-Scholes flat 0.1458: $16.632042235853 vs closed form $16.632042235853: |diff| 3.2e-14
+   on the grid (the blur itself): a Dec 18 option valued on Nov 20 under flat vol, averaged over the
+   market's Nov 20 odds; one side blurs the payoff over the 28 days, the other blurs the density
+   PASS r, drift call K 770: sum p0 * blur(f) $18.1876574713072, e^-rt sum blur(p0) * f $18.1876574713070: |diff| 2.5e-13
+   PASS r, drift put K 700: sum p0 * blur(f) $2.3520032855168, e^-rt sum blur(p0) * f $2.3520032855168: |diff| 2.4e-14
+   PASS r, drift call K 800: sum p0 * blur(f) $6.4593611716354, e^-rt sum blur(p0) * f $6.4593611716352: |diff| 2.2e-13
+   PASS no drift, call K 770: sum p0 * blur(f) $17.2458475582548, e^-rt sum blur(p0) * f $17.2458475582545: |diff| 3.1e-13
+   PASS no drift, put K 700: sum p0 * blur(f) $2.4709510183666, e^-rt sum blur(p0) * f $2.4709510183666: |diff| 6.2e-14
+   PASS no drift, call K 800: sum p0 * blur(f) $5.9870976615144, e^-rt sum blur(p0) * f $5.9870976615142: |diff| 2.4e-13
+        30001 nodes, dx 0.0001, 7269 taps; the payoff blur is the transpose of the density blur, so the two sums
+        are the same numbers added in a different order: the gap is roundoff.
+
+3. The same heat equation, opposite directions
+   PASS no drift: the kernel is symmetric (max |w_j - w_-j| = 0e+00), so payoff blur = density blur, the same matrix
+   PASS with drift mu tau = +2.371e-03: the density's mean moves by +2.371e-03 (forward in time)
+   PASS ... and the payoff is read at x + mu tau: blur of f(y) = y at x = 0 is +2.371e-03 (the payoff's picture moves the other way, by -mu tau)
+        (kernel asymmetry with drift 7.0e-05; in the frame moving with mu, both are w_s = w_zz / 2)
+        Payoff: backward Kolmogorov, expiry -> today, plus discounting. Density: Fokker-Planck, data -> noise.
+        Each runs the heat equation forward in its own clock (each blurs); neither un-blurs.
+
+4. The VE forward process on the market's Dec 18 density
+   sigma(t) = 0.01 * (1.0/0.01)^t (Song et al. 2021 VE, in log-return units; the data's sd is 0.0664),
+   1000 chain steps x_i = x_(i-1) + sqrt(sigma_i^2 - sigma_(i-1)^2) z, each a sampled-Gaussian blur of the grid
+   density (32001 nodes, dx 0.0005, 1.2 s); reference: the market's Merton mixture with sigma^2(t) - sigma^2(0)
+   added to every component's variance (the exact Gaussian blur of the density, closed form)
+   PASS t = 0.25, sigma 0.0316: max |chain - blur| 3.6e-14 per unit of y (peak 6.848; < 1e-10), mass 1.000000000000
+   PASS t = 0.50, sigma 0.1000: max |chain - blur| 5.6e-14 per unit of y (peak 3.435; < 1e-10), mass 1.000000000000
+   PASS t = 0.75, sigma 0.3162: max |chain - blur| 6.0e-14 per unit of y (peak 1.236; < 1e-10), mass 1.000000000000
+   PASS t = 1.00, sigma 1.0000: max |chain - blur| 3.5e-14 per unit of y (peak 0.398; < 1e-10), mass 1.000000000000
+   PASS one blur by sqrt(sigma_max^2 - sigma_min^2) vs the 1000-step chain: max |diff| 3.5e-14
+   PASS 100,000 particles through the same chain, t = 0.50: KS vs the blur D 0.0033, p 0.24
+   PASS t = 1.00: KS D 0.0022, p 0.70
+        at t = 1 the blurred market is 0.0039 in L1 from the pure-noise prior N(0, 1.0^2) (2 = disjoint);
+        the market's skew and jumps are still in it, just small. Stage 2 starts the reverse run there.
+
+5. DDPM's shrink vs Black-Scholes' drift and discounting
+   DDPM (Ho et al. 2020): x_t = sqrt(1 - beta_t) x_(t-1) + sqrt(beta_t) eps, beta linear 0.0001..0.02, 1000 steps
+   PASS step 100: particles vs closed form (every component's mean x sqrt(abar), var -> abar var + 1 - abar): KS D 0.0022, p 0.74; sqrt(abar) 0.9471
+   PASS step 500: particles vs closed form (every component's mean x sqrt(abar), var -> abar var + 1 - abar): KS D 0.0027, p 0.45; sqrt(abar) 0.2803
+   PASS step 1000: particles vs closed form (every component's mean x sqrt(abar), var -> abar var + 1 - abar): KS D 0.0035, p 0.17; sqrt(abar) 0.0064
+   PASS DDPM divided by sqrt(abar_t) is the VE process with sigma^2 = (1 - abar)/abar: densities agree to 2e-15 (steps 10, 100, 500)
+   Side by side (Dec 18 slice: r 4.15%, T 0.1562):
+                    Black-Scholes (pricing)                    DDPM / VP SDE (image models)
+   noise            sigma dW on ln S (times S on S)            sqrt(beta) dw on x, additive
+   first-order term ln S: + (r - s^2/2) dt, a shift            - beta/2 x dt, a shrink toward 0
+                    S: + r S dt, growth e^rT = 1.00651         mean x sqrt(abar_T) = 0.0064
+   remove it by     discounting S: e^-rt S_t is a martingale   rescaling: x_t / sqrt(abar_t) is VE
+   discount e^-rT   multiplies the value (0.99353),            no counterpart: density mass stays 1
+                    not the coordinate (killing at rate r)     
+   equation run     backward Kolmogorov on the payoff          Fokker-Planck on the density
+        The shrink is DDPM's drift, not its discount: in price space Black-Scholes' drift r S is the same linear form
+        with the opposite sign (growth at r; DDPM shrinks at beta/2, from 5e-05 to 1e-02 per step,
+        a total factor 0.0064, like a rate of -5.06 over the run).
+        In log-price Black-Scholes' drift is a constant shift, not a shrink; the noise is multiplicative in S.
+        Discounting has no diffusion-model analog: it scales the payoff's value; a density keeps mass 1.
+
+all Stage 1 checks pass (5 s)

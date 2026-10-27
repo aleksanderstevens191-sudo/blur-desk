@@ -97,6 +97,14 @@
       .ts .side .foot b.good { color: var(--green); }
       .ts .side .foot b.bad { color: var(--red); }
       @media (max-width: 820px) { .ts { grid-template-columns: 1fr; } }
+      .df { display: grid; grid-template-columns: 1fr 1fr 0.85fr; gap: 8px; }
+      .df canvas { height: 300px !important; }
+      .df .side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .df .side .rel { height: 44px; }
+      .df .side .foot { white-space: normal; }
+      .df .side .foot b { color: var(--text); }
+      .df .chips button { font-size: 8px; }
+      @media (max-width: 820px) { .df { grid-template-columns: 1fr; } }
       .lv { display: grid; grid-template-columns: 1fr 1fr 1fr 0.85fr; gap: 8px; }
       .lv canvas { height: 250px !important; }
       .lv .side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -394,6 +402,28 @@
                 <div class="foot"><span id="lvRiskFoot">—</span></div>
               </div>
               <canvas id="lvRisk" aria-label="Model risk: barrier prices under Black-Scholes, Merton and local vol, which all fit SPY's vanillas"></canvas>
+            </div>
+          </div>
+          <div class="panel full" id="dfPanel">
+            <h3>16 / DIFFUSION <em id="dfTag">PRICING BLURS A PAYOFF · A DIFFUSION MODEL BLURS A DENSITY</em></h3>
+            <div class="df">
+              <canvas id="dfPay" aria-label="A call's payoff melting into its price: a Gaussian blur of the payoff"></canvas>
+              <canvas id="dfDen" aria-label="The market's odds melting into noise: a diffusion model's forward process, a Gaussian blur of the density"></canvas>
+              <div class="side">
+                <div class="rel"><div class="big na" id="dfErr">—</div></div>
+                <div class="foot"><span id="dfVs">LIVE VS CLOSED FORMS, WORST OF BOTH BLURS</span></div>
+                <label class="sl jump"><span>BLUR <b id="dfLvl"></b></span><input type="range" id="dfS" min="0" max="128" step="1" value="48" /></label>
+                <div class="foot"><span id="dfSame">—</span></div>
+                <div class="row even">
+                  <button class="toggle" id="dfPlay">▶ PLAY: NOISE → ODDS</button>
+                  <div class="chips two" role="group" aria-label="Where the reverse run starts">
+                    <button data-dfs="0" aria-pressed="true">BLURRED ODDS</button>
+                    <button data-dfs="1">PURE N(0,1)</button>
+                  </div>
+                </div>
+                <div class="foot"><span id="dfRun">—</span></div>
+                <div class="foot"><span id="dfGpu">—</span></div>
+              </div>
             </div>
           </div>
         </section>
