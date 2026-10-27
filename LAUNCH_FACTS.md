@@ -155,10 +155,33 @@ Commits are on branch `part4-localvol` until it merges. The Oct 23 2026 SPY chai
 | L17 | The same at 819 days (1,434 steps) | GPU vs Python 0.0048 vol pts | ⚠ cloud (SwiftShader) | `src/test-demo-lv.mjs` run by hand |
 | L18 | Panel 15's reprice time at 7 / 28 / 98 days (160 / 384 / 608 steps over 2,814 spots, 16 strikes) | **177 / 412 / 816 ms** (SwiftShader: 43 / 94 / 132 s) | Mac, 2026-10-27 | same |
 
+## Diffusion models (Part 5, panel 16)
+
+Commits are on branch `part5-diffusion` until it merges. The density is the market's Dec 18 odds from panel 13 (the SPY Merton fit to the Oct 22 2026 quotes, `src/spy_fit.json`), in log-return ln(S_T / S). Risk-neutral, not a forecast. What may and may not be said about these numbers is in `docs/diffusion_claims.md`.
+
+| # | What | Value | Machine | Source |
+| --- | --- | --- | --- | --- |
+| D1 | Duality on the grid: Σ density × blurred payoff vs Σ blurred density × payoff, 6 options (with and without drift) | **$3e-13** (target 1e-12) | ⚠ cloud (numpy, 64-bit; any machine) | `reference/diffusion_stage1_results.txt` (690e296) |
+| D2 | Duality by quadrature: payoff averaged against SPY's Merton density vs Merton's series, 4 options | $7e-14 | ⚠ cloud (64-bit) | same |
+| D3 | The variance-exploding forward process (Song et al. 2021), 1,000 steps on the Dec 18 density, vs one Gaussian blur in closed form | **6e-14** per unit of density (target 1e-10) | ⚠ cloud (64-bit) | same |
+| D4 | DDPM (Ho et al. 2020) divided by √ᾱ vs the VE process / its total shrink over 1,000 steps | 2e-15 / √ᾱ = 0.0064 | ⚠ cloud (64-bit) | same |
+| D5 | Reverse run (probability-flow ODE, grid score, RK4 400 steps), 200,000 quantiles: L1 / largest CDF gap | **2.2e-5** / 3.0e-6 | ⚠ cloud (64-bit) | `reference/diffusion_stage2_results.txt` (1bf6f9e) |
+| D6 | Its P(fall > 10%) / P(rise > 10%) by Dec 18 | 7.615% / 2.988%, as panel 13 (O-rows) | ⚠ cloud (64-bit) | same |
+| D7 | 100,000 random samples run back: KS vs the market / vs flat 14.6% Black-Scholes | D 0.0024, **p 0.62** / D 0.097, rejected | ⚠ cloud | same |
+| D8 | The same from pure N(0, 1) noise instead of the blurred odds | D 0.0045, p 0.04 (the start is 0.0039 off in L1) | ⚠ cloud | same |
+| D9 | Tweedie's formula vs a Monte Carlo conditional mean, 2,000,000 pairs, σ 0.03 / 0.1 / 0.3 | every bin within 2.5 standard errors | ⚠ cloud | same |
+| D10 | Panel 16's own algorithm (dx 0.002, 128 Heun steps), 20,000 quantiles: CDF gap / L1 | 2.3e-4 / 8.7e-4 | ⚠ cloud (64-bit) | `reference/make_diffusion_fixtures.py` (CI `--check`) |
+| D11 | Panel 16's math in 64-bit JS vs Python | worst 1.8e-13 | ⚠ cloud | `src/test-diffusion.mjs` (CI) |
+| D12 | WGSL vs Python (`/check.html?only=diffusion`): density at 6 levels / call at 6 levels × 12 spots (per $100 of forward) / 2,048 sampler points (log-return) | SwiftShader: 1.3e-6 / 1.5e-5 / 5.6e-7 | Mac: to measure | SwiftShader: `/mnt/project-files/diffusion/stage4/check-diffusion-swiftshader.txt`; CI |
+| D13 | GPU time: all 129 noise levels' blur and score (6,001 nodes, one dispatch) / 65,536 points × 128 Heun steps | SwiftShader: 5.9 s / 43 ms (2,048 points), 0.3 s (65,536) | Mac: to measure | same |
+| D14 | Panel 16 live vs closed forms at 5 slider levels: price vs Black (per $100) / density vs Merton + blur | SwiftShader: worst **5.7e-5** / 1.3e-6 | Mac: to measure | `src/test-demo-diffusion.mjs` (CI) |
+| D15 | Panel 16's reverse run, 65,536 points from the blurred odds: KS vs the market; P(fall > 10%) | SwiftShader: D 0.0038, p 0.31; 7.44% vs 7.62% | Mac: to measure | same |
+
 ## Still to measure on the Mac
 
 1. QuantLib barriers on all cores, if you want a barrier ratio against all cores (Q3).
 2. Panel 14 on the Mac (T14): the live errors and the reprice time. Open the demo, scroll to 14 / TWO STOCKS and read the numbers off the panel.
+3. Panel 16 on the Mac (D12–D15): `/check.html?only=diffusion`, then the demo's 16 / DIFFUSION panel after pressing Play.
 
 Done on 2026-10-27: `/check.html?only=lv` (L15, all PASS) and panel 15 at 7, 28 and 98 days (L16, L18).
 

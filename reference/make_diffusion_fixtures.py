@@ -1,6 +1,7 @@
 """Part 5 Stage 4: fixtures for panel 16 on the GPU (src/gpu-diffusion.js) and its 64-bit JS twin (src/diffusion.js).
 
-python reference/make_diffusion_fixtures.py   -> src/diffusion_fixtures.json
+python reference/make_diffusion_fixtures.py           -> src/diffusion_fixtures.json
+python reference/make_diffusion_fixtures.py --check   (CI) recompute and compare with the committed file, 1e-10
 
 Everything is panel 16's algorithm (diffusion.PANEL, the end of diffusion.py) in float64, on the market's Dec 18
 density from src/spy_fit.json:
@@ -24,6 +25,17 @@ P = D.market(C["e"])
 LEVELS = [0, 16, 32, 64, 96, 128]
 STRIDE = 20
 K_USD = 770.0
+
+
+def compare(a, b):
+    """Largest absolute difference between two JSON trees of the same shape (inf if the shapes differ)."""
+    if isinstance(a, dict):
+        return max((compare(a[k], b.get(k)) for k in a), default=0.0) if isinstance(b, dict) and a.keys() == b.keys() else np.inf
+    if isinstance(a, list):
+        return max((compare(x, y) for x, y in zip(a, b)), default=0.0) if isinstance(b, list) and len(a) == len(b) else np.inf
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return abs(a - b)
+    return 0.0 if a == b else np.inf
 
 
 def main():
@@ -53,6 +65,12 @@ def main():
         quality=dict(M=M, cdf_gap=gap, l1=l1),
     )
     path = HERE.parent / "src" / "diffusion_fixtures.json"
+    if "--check" in sys.argv:
+        worst = compare(json.loads(path.read_text()), json.loads(json.dumps(out)))
+        ok = worst < 1e-10
+        print(f"{'PASS' if ok else 'FAIL'} {path.name} recomputed: worst difference {worst:.1e} (< 1e-10); "
+              f"the run's own accuracy: CDF gap {gap:.1e}, L1 {l1:.1e}")
+        sys.exit(0 if ok else 1)
     path.write_text(json.dumps(out, separators=(",", ":")))
     print(f"{path.name}: {path.stat().st_size / 1e3:.0f} kB; levels {LEVELS}, {len(idx)} nodes each, {len(xs)} spots, "
           f"2,048 sampler points; the run's own accuracy on {M:,} quantiles: CDF gap {gap:.1e}, L1 {l1:.1e}")

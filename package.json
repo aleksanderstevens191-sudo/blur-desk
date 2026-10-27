@@ -4,7 +4,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node src/test.mjs && node src/test-barriers.mjs && node src/test-fft.mjs && node src/test-kernels.mjs && node src/test-chain.mjs && node src/test-odds.mjs && node src/test-2d.mjs && node src/test-lv.mjs"
+    "test": "node src/test.mjs && node src/test-barriers.mjs && node src/test-fft.mjs && node src/test-kernels.mjs && node src/test-chain.mjs && node src/test-odds.mjs && node src/test-2d.mjs && node src/test-lv.mjs && node src/test-diffusion.mjs"
   },
   "devDependencies": {
     "vite": "^8.3.4"

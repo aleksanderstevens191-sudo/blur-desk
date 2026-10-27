@@ -68,6 +68,16 @@ Short names for the sources (full references at the end):
 | D2 | "The density came straight from option prices." | **Approximately true** | It goes quotes → Merton fit → second difference in strike (Breeden-Litzenberger). Raw quotes are too noisy to difference twice. | BL78 |
 | D3 | "The diffusion model predicts SPY." | **False** | Nothing here forecasts anything (C10, D1). | |
 
+## E. The GPU and the demo (panel 16)
+
+| # | Sentence | Verdict | Why, and the check | Source |
+|---|---|---|---|---|
+| E1 | "The GPU matches the Python reference within 1e-4." | **Exact** (measured) | `/check.html?only=diffusion`. On the software GPU: density 1.3e-6, call 1.5e-5 per $100, sampler points 5.6e-7. The Mac figures are in `LAUNCH_FACTS.md` D12 once measured. Quote the machine with the number. | LAUNCH_FACTS D12 |
+| E2 | "Press play and the demo rebuilds the market's odds from noise." | **Approximately true**: say which noise | By default the run starts from the odds blurred to σ = 1. The panel's 128-step run is coarser than Stage 2: CDF gap 2.3e-4, L1 8.7e-4 in 64-bit. On the software GPU, 65,536 points give KS p 0.31 and P(fall > 10%) 7.44% against the market's 7.62%, a 1.7 standard error sampling gap. | LAUNCH_FACTS D10, D15 |
+| E3 | "A diffusion model running in your browser." | **Approximately true**: say "a diffusion sampler" | It is the sampler and the forward process, with the score computed from a known density. Nothing was trained (C2). | |
+| E4 | "Both sides of the panel are the same blur." | **Exact** | One Gaussian with the slider's sd. On the left it is applied to the payoff (Black-Scholes at r = 0), on the right to the density. Each side is checked live against its closed form, to within 5.7e-5. | LAUNCH_FACTS D14 |
+| E5 | "The slider runs the payoff backward in time." | **False** | When the slider moves left, the panel shows a shorter-dated option. That option is a smaller blur of the same payoff, not an un-blurred price (A10). | |
+
 ## Claims you must not make
 
 1. "Option pricing is reverse diffusion / denoising / a generative model." Pricing blurs; generation un-blurs (A10, A11).
