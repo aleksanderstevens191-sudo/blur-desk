@@ -344,6 +344,21 @@ export const recorder = {
     if (j !== st.j) setLevel(j);
   },
   play: (t0) => play(t0),
+  // the run a take ends on (reset, then the first seed, already finished), for the opening frame
+  async finished() {
+    this.reset();
+    const r = await play(performance.now() - PLAY_MS);
+    this.reset();
+    return r;
+  },
+  // show a finished run at level 0, as if its play had just ended
+  hold(r) {
+    plays++;
+    playing = null;
+    run = r;
+    $("dfPlay").disabled = !gpu;
+    setLevel(0);
+  },
 };
 
 // for the headless check (live.seq === asked with busy false: live answers the latest request)

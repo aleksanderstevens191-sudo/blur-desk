@@ -523,7 +523,7 @@ The Mac readings are in `reference/diffusion_mac.txt`.
 
 On Alek's Mac the panel read 5.4e-5 with the slider all the way right and 4.4e-7 all the way left. It built its 129 levels in 380 ms and ran the 65,536 points back in 11 ms. The run starts from the same seeded points on every machine, and it gave the same KS result as SwiftShader (D 0.0038, p 0.31) and the same 7.44%.
 
-`/?record=2` plays the panel as a 15-second clip in the same 1080 × 1080 frame as `/?record=1`: the slider blurs the Dec 18 odds into noise, Play runs 65,536 points back from the same seed, and it holds on the read-off (7.44% rebuilt against the market's 7.62%). Every number in it is computed as it plays.
+`/?record=2` plays the panel as a 15-second clip in the same 1080 × 1080 frame as `/?record=1`: the slider blurs the Dec 18 odds into noise, Play runs 65,536 points back from the same seed, and it holds on the read-off (7.44% rebuilt against the market's 7.62%). Every number in it is computed as it plays. Both clips open with a one-second hold on their finished frame, so a post's first frame and thumbnail are the result; `launch-media/` has the recording steps and the post text.
 
 ![Panel 16 of the demo](docs/demo_diffusion.png)
 
