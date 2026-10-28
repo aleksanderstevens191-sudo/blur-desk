@@ -1041,7 +1041,8 @@ scene.addEventListener("pointercancel", () => (drag = null));
 
 
 // ---- ?record=1: a 1080 x 1080 frame and a fixed 15-second sequence ----
-// Draw a zigzag, melt it into a price curve by sweeping expiry, switch the kernel
+// Open on the finished frame for a second (the post's first frame and thumbnail),
+// then start over: draw a zigzag, melt it into a price curve by sweeping expiry, switch the kernel
 // to the SPY fit (the smile appears against SPY's quotes), then hold on the
 // market's odds. Every input is a function of the time since PLAY, so a replay
 // repeats it exactly; every number on screen comes from the pricing as it runs.
@@ -1049,6 +1050,8 @@ scene.addEventListener("pointercancel", () => (drag = null));
 // &scale=0.5 draws the 1080 frame at half size (1080 device pixels on a 2x screen).
 const params = new URLSearchParams(location.search);
 const REC_ON = params.get("record") === "1";
+const REC_COLD = 1.0; // the opening hold on the finished frame; the steps start after it
+const REC_POSTER = { step: "00", text: "OPTION PRICES ARE BLURRED PAYOFFS · LIVE ON YOUR GPU" };
 const REC_STEPS = [
   { at: 0, step: "01", text: "DRAW A PAYOFF" },
   { at: 3.2, step: "02", text: "BLUR IT ON THE GPU · LONGER EXPIRY, WIDER BLUR" },
@@ -1061,12 +1064,23 @@ const REC_T1 = 1; // expiry after the sweep
 const ease = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * u));
 const rec = { on: REC_ON, playing: false, t0: 0, t: 0, applied: {} };
 
-// What the sequence sets at time t
+// What the sequence sets at time t (before REC_COLD: the last step's frame)
 function recInputs(t) {
+  if (t < REC_COLD) return { pen: 140, T: REC_T1, phase: REC_STEPS.length - 1, cold: true };
+  t -= REC_COLD;
   const pen = t < 0.3 ? 60 : Math.min(140, 60 + Math.round((80 * ease((t - 0.3) / 2.6)) / Payoff.STEP) * Payoff.STEP);
   const T = Math.round((REC_T0 + (REC_T1 - REC_T0) * ease((t - 3.2) / 4.4)) * 100) / 100;
   const phase = REC_STEPS.filter((s) => t >= s.at).length - 1;
-  return { pen: +pen.toFixed(1), T, phase };
+  return { pen: +pen.toFixed(1), T, phase, cold: false };
+}
+
+// Back to the plain Gaussian blur at 30% (where step 01 starts)
+function recGaussian() {
+  Object.assign(state.jumps.merton, { lam: 1, m: -0.1, delta: 0.1 });
+  state.sigma = 0.3;
+  $("sigma").value = 0.3;
+  setSpy(false);
+  setModel("gaussian");
 }
 
 function recApply(t) {
@@ -1085,10 +1099,14 @@ function recApply(t) {
     showSliders();
     price = true;
   }
-  if (want.phase !== had.phase) {
-    const s = REC_STEPS[want.phase];
+  if (want.phase !== had.phase || want.cold !== had.cold) {
+    const s = want.cold ? REC_POSTER : REC_STEPS[want.phase];
     $("recStep").textContent = s.step;
     $("recCap").textContent = s.text;
+    if (want.phase < 2 && state.spyFit) {
+      recGaussian();
+      resmile();
+    }
     if (want.phase >= 2 && !state.spyFit) {
       state.expiry = 1;
       pick("expiry", 1);
@@ -1106,11 +1124,7 @@ function recReset() {
   rec.playing = false;
   rec.t = 0;
   rec.applied = {};
-  Object.assign(state.jumps.merton, { lam: 1, m: -0.1, delta: 0.1 });
-  state.sigma = 0.3;
-  $("sigma").value = 0.3;
-  setSpy(false);
-  setModel("gaussian");
+  recGaussian();
   cam.az = -0.55;
   cam.el = 0.42;
   setView("orbit");
@@ -1172,21 +1186,24 @@ async function recWarm() {
 }
 
 // ---- ?record=2: panel 16 in the same 1080 x 1080 frame, 15 seconds ----
-// Blur the market's Dec 18 odds into noise with the slider (the call's payoff melts
+// Open for a second on the finished read-off (the run warm() made from the take's own
+// seed, so it is the take's last frame), then start over. Blur the market's Dec 18 odds into noise with the slider (the call's payoff melts
 // into its price beside them), press Play to run 65,536 points of that noise back,
 // then hold on the read-off. The slider is a function of the time since PLAY and the
 // reverse run starts from the same seed (17) every take, so a replay repeats it; every
 // number on screen comes from the panel as it runs. Same keys and &autoplay / &scale.
 const REC2_ON = params.get("record") === "2";
 const REC2_STEPS = [
-  { at: 0, step: "01", text: () => `THE MARKET'S ODDS FOR ${recorder.expiry}, FROM SPY OPTION PRICES` },
-  { at: 1.2, step: "02", text: () => "BLUR THEM INTO NOISE · THE SAME BLUR PRICES A CALL" },
-  { at: 6.0, step: "03", text: () => `PLAY: ${recorder.NP.toLocaleString("en-US")} POINTS RUN BACK · EXACT SCORE, NO NETWORK` },
-  { at: 10.4, step: "04", text: () => "THE ODDS, REBUILT FROM THE NOISE" },
+  { at: 0, step: "00", text: () => `NOISE IN, THE MARKET'S ODDS OUT · LIVE ON YOUR GPU` },
+  { at: 1.0, step: "01", text: () => `THE MARKET'S ODDS FOR ${recorder.expiry}, FROM SPY OPTION PRICES` },
+  { at: 2.2, step: "02", text: () => "BLUR THEM INTO NOISE · THE SAME BLUR PRICES A CALL" },
+  { at: 7.0, step: "03", text: () => `PLAY: ${recorder.NP.toLocaleString("en-US")} POINTS RUN BACK · EXACT SCORE, NO NETWORK` },
+  { at: 11.4, step: "04", text: () => "THE ODDS, REBUILT FROM THE NOISE" },
 ];
-const REC2_SWEEP = [1.2, 5.6]; // the slider walks from no blur to sigma 1
-const REC2_PLAY = 6.0;
-const rec2 = { playing: false, t0: 0, t: 0, phase: -1, played: false, ready: false };
+const REC2_COLD = 1.0; // the opening hold on the finished read-off
+const REC2_SWEEP = [2.2, 6.6]; // the slider walks from no blur to sigma 1
+const REC2_PLAY = 7.0;
+const rec2 = { playing: false, t0: 0, t: 0, phase: -1, played: false, ready: false, poster: null, cold: false };
 
 function rec2Show() {
   const r = recorder.run;
@@ -1202,12 +1219,19 @@ function rec2Show() {
 
 function rec2Apply(t) {
   const phase = REC2_STEPS.filter((s) => t >= s.at).length - 1;
+  const cold = t < REC2_COLD && !!rec2.poster;
+  if (cold !== rec2.cold) {
+    rec2.cold = cold;
+    cold ? recorder.hold(rec2.poster) : recorder.reset();
+  }
   if (phase !== rec2.phase) {
     rec2.phase = phase;
     $("recStep").textContent = REC2_STEPS[phase].step;
     $("recCap").textContent = REC2_STEPS[phase].text();
   }
-  if (t < REC2_PLAY) {
+  if (cold) {
+    // the finished frame holds
+  } else if (t < REC2_PLAY) {
     recorder.setLevel(Math.round(PANEL.N * ease((t - REC2_SWEEP[0]) / (REC2_SWEEP[1] - REC2_SWEEP[0]))));
   } else if (!rec2.played) {
     rec2.played = true;
@@ -1221,6 +1245,7 @@ function rec2Reset() {
   rec2.played = false;
   rec2.t = 0;
   rec2.phase = -1;
+  rec2.cold = false;
   recorder.reset();
   rec2Apply(0);
 }
@@ -1283,6 +1308,7 @@ async function rec2Warm() {
   await initDiffusion({ gpu: useGPU });
   try {
     await recorder.warm();
+    rec2.poster = await recorder.finished();
   } catch (err) {
     $("recHint").textContent = err.message.toUpperCase();
     return;
