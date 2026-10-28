@@ -199,7 +199,8 @@ function drawRisk() {
   const name = Object.keys(mr.expiries)[st.risk];
   const t = mr.expiries[name];
   const rows = t.rows.filter((r) => Math.max(r.bs, r.merton, r.lv) > 0.05);
-  const x0 = 250, x1 = W - 120, y0 = 22, y1 = H - 16;
+  const narrow = W < 560; // phones: each row's name on its own line, above its bar
+  const x0 = narrow ? 14 : 250, x1 = W - (narrow ? 92 : 120), y0 = narrow ? 36 : 22, y1 = H - 16;
   const lmin = Math.log(0.01), lmax = Math.log(300);
   const xOf = (v) => x0 + ((Math.log(Math.max(v, 0.01)) - lmin) / (lmax - lmin)) * (x1 - x0);
   const dy = (y1 - y0) / rows.length;
@@ -211,8 +212,10 @@ function drawRisk() {
     label(ctx, `$${v}`, xOf(v), y1 + 8, { size: 8, alpha: 0.45 });
   }
   rows.forEach((r, n) => {
-    const y = y0 + (n + 0.5) * dy;
-    label(ctx, `${r.type.toUpperCase()} H ${(100 * r.barrier).toFixed(0)}% K ${(100 * r.strike).toFixed(0)}%`, x0 - 10, y, { size: 8, align: "right", alpha: 0.7 });
+    const y = y0 + (n + (narrow ? 0.7 : 0.5)) * dy;
+    const name = `${r.type.toUpperCase()} H ${(100 * r.barrier).toFixed(0)}% K ${(100 * r.strike).toFixed(0)}%`;
+    if (narrow) label(ctx, name, x0 - 6, y - 0.42 * dy, { size: 8, align: "left", alpha: 0.7 });
+    else label(ctx, name, x0 - 10, y, { size: 8, align: "right", alpha: 0.7 });
     const vals = [r.bs, r.merton, r.lv];
     const p = new Path2D();
     p.moveTo(xOf(Math.min(...vals)), y);
@@ -232,8 +235,13 @@ function drawRisk() {
     ctx.fill();
     label(ctx, `$${(Math.max(...vals) - Math.min(...vals)).toFixed(2)} APART`, x1 + 8, y, { size: 8, align: "left", alpha: 0.75 });
   });
-  label(ctx, `MODEL RISK · ${name} (${t.days} DAYS) · SAME VANILLAS, DIFFERENT BARRIERS · $ PER SHARE (LOG)`, 8, 8, { size: 8, align: "left", alpha: 0.6 });
-  label(ctx, "○ BS AT-THE-MONEY VOL   □ MERTON (FITTED)   ◆ LOCAL VOL", W - 8, 8, { size: 8, align: "right", alpha: 0.75 });
+  if (narrow) {
+    label(ctx, `MODEL RISK · ${name} (${t.days} DAYS) · $ PER SHARE (LOG)`, 8, 8, { size: 8, align: "left", alpha: 0.6, max: W - 16 });
+    label(ctx, "○ BS ATM VOL   □ MERTON   ◆ LOCAL VOL", 8, 21, { size: 8, align: "left", alpha: 0.75, max: W - 16 });
+  } else {
+    label(ctx, `MODEL RISK · ${name} (${t.days} DAYS) · SAME VANILLAS, DIFFERENT BARRIERS · $ PER SHARE (LOG)`, 8, 8, { size: 8, align: "left", alpha: 0.6 });
+    label(ctx, "○ BS AT-THE-MONEY VOL   □ MERTON (FITTED)   ◆ LOCAL VOL", W - 8, 8, { size: 8, align: "right", alpha: 0.75 });
+  }
 }
 
 // ---------- the live GPU round trip ----------

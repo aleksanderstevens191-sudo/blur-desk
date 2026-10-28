@@ -831,7 +831,7 @@ export function drawChain(ctx, W, H, d, hover) {
   let cap = d.priced ? `${name} · PUTS LEFT OF F, CALLS RIGHT` : "EVERY OUT-OF-THE-MONEY QUOTE · PRICE THE CHAIN TO COLOUR IT";
   ctx.font = `500 8px ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
   if (d.priced && l + ctx.measureText(cap).width > lx - 24) cap = name; // narrow: leave room for the legend
-  label(ctx, cap, l, 7, { align: "left", size: 8, alpha: 0.5 });
+  label(ctx, cap, l, 7, { align: "left", size: 8, alpha: 0.5, max: W - l - 4 });
   if (d.priced) {
     ctx.globalCompositeOperation = "source-over";
     for (let j = 0; j < lw; j++) {
@@ -907,5 +907,8 @@ export function drawOdds(ctx, W, H, d) {
   glow(ctx, polyline(x, flat, px, py), WHITE, 0.45, 1, 0);
   ctx.setLineDash([]);
   glow(ctx, polyline(x, dens, px, py), WHITE, 1, 1.5, 1.2);
-  label(ctx, "WHITE: MARKET-IMPLIED (RISK-NEUTRAL) DENSITY · DASHED: ONE FLAT VOL", l, 7, { align: "left", size: sz, alpha: 0.5 });
+  let cap = "WHITE: MARKET-IMPLIED (RISK-NEUTRAL) DENSITY · DASHED: ONE FLAT VOL";
+  ctx.font = `500 ${sz * TEXT.scale}px ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace`;
+  if (l + ctx.measureText(cap).width > W - 4) cap = "WHITE: THE MARKET'S ODDS · DASHED: ONE FLAT VOL"; // phone width
+  label(ctx, cap, l, 7, { align: "left", size: sz, alpha: 0.5, max: W - l - 4 });
 }
