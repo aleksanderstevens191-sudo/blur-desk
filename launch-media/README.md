@@ -27,7 +27,8 @@ early still opens on it.
 1. In Chrome, open `blur-desk.vercel.app/?record=1`. Type the address in full and check
    the URL bar still says `?record=1` (autocomplete dropped it on two earlier takes).
 2. Wait for `READY · SPACE PLAYS 15 S` under the frame. Click once on the page so it has
-   the keyboard.
+   the keyboard. Then leave the pointer on that READY line, below the frame, so it
+   stays out of the recording.
 3. Cmd + Shift + 5 → Record Selected Portion. Draw the box tightly around the square
    frame (leave out the hint line under it). Click Record.
 4. Press Space. The take ends at `DONE` after 15 s. Stop the recording from the menu bar.

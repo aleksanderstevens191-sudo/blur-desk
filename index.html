@@ -138,6 +138,10 @@
       #rec .recBrand { margin-left: auto; font-size: 18px; color: var(--muted); letter-spacing: 0.1em; }
       #rec .cells { grid-template-columns: 1.55fr 1fr 1fr 1.25fr 1.15fr; }
       #rec .cell { padding: 12px 14px; gap: 4px; }
+      /* the frame is always 1080 wide: undo the phone rules a narrow window brings in */
+      #rec .cell:nth-child(3) { border-right: 1px solid var(--line); }
+      #rec .cell:nth-child(n + 4) { border-top: 0; }
+      #rec .cell:nth-child(5) { grid-column: auto; }
       #rec .cell span { font-size: 13px; }
       #rec .cell b { font-size: 21px; }
       #rec .recCap { display: flex; gap: 16px; align-items: baseline; font-size: 24px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 4px; }
